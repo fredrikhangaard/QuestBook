@@ -8,6 +8,9 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import no.ntnu.prog2007.questbook.ui.login.CreateUserScreen
+import no.ntnu.prog2007.questbook.ui.login.LoginScreen
+import no.ntnu.prog2007.questbook.ui.welcome.WelcomeScreen
 import no.ntnu.prog2007.questbook.ui.quest.QuestScreen
 import no.ntnu.prog2007.questbook.ui.questbook.QuestBookScreen
 import no.ntnu.prog2007.questbook.ui.today.TodayScreen
@@ -16,15 +19,45 @@ import no.ntnu.prog2007.questbook.ui.today.TodayScreen
 fun QuestBookNavHost() {
 
     val navController = rememberNavController()
+    val isLoggedIn = false
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
         NavHost(
             navController = navController,
-            startDestination = "today",
+            startDestination = if (isLoggedIn) "today" else "launch",
             modifier = Modifier.padding(padding)
         ) {
+
+            composable("launch") {
+                WelcomeScreen(
+                    onSignInClick = { navController.navigate("login") },
+                    onCreateUserClick = { navController.navigate("createuser") }
+                )
+            }
+
+            composable("login") {
+                LoginScreen(
+                    onSignIn = { _, _ ->
+                        navController.navigate("today") {
+                            popUpTo("launch") { inclusive = true }
+                        }
+                    },
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
+            composable("createuser") {
+                CreateUserScreen(
+                    onCreateUser = { _, _, _ ->
+                        navController.navigate("today") {
+                            popUpTo("launch") { inclusive = true }
+                        }
+                    },
+                    onBack = { navController.popBackStack() }
+                )
+            }
 
             composable("today") {
                 TodayScreen(
