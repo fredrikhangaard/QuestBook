@@ -15,7 +15,7 @@ fun QuestBookNavHost() {
 
     NavHost(
         navController = navController,
-        startDestination = "gps_test"
+        startDestination = "today"
     ) {
 
         composable("today") {
