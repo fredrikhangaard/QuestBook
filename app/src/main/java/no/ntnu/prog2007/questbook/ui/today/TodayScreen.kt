@@ -17,7 +17,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
 fun TodayScreen(
-    onQuestClick: () -> Unit,
+    onQuestClick: (String) -> Unit,
     onQuestBookClick: () -> Unit,
     todayViewModel: TodayViewModel = viewModel()
 ) {
@@ -42,7 +42,9 @@ fun TodayScreen(
                     Text("Assigned to: ${quest.assignedTo}")
                     Text("Status: ${quest.status}")
 
-                    Button(onClick = onQuestClick) {
+                    Button(
+                        onClick = { onQuestClick(quest.id) }
+                    ) {
                         Text("View Quest")
                     }
                 }
