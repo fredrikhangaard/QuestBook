@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "315529675276",
+    "project_id": "questbook-1b814",
+    "storage_bucket": "questbook-1b814.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:315529675276:android:d1260a2ad964a55975a429",
+        "android_client_info": {
+          "package_name": "no.ntnu.prog2007.questbook"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBGOpJFLCQljKkGwCFqnmrz5I7S1UwviOo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
