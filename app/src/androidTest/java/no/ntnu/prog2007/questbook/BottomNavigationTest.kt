@@ -34,9 +34,9 @@ class BottomNavigationTest {
         compose.onNodeWithTag("tab_questbook").assertIsSelected()
         compose.onNodeWithText("This week").assertIsDisplayed()
         compose.onNodeWithTag("tab_today").performClick()
-        compose.onAllNodesWithText("View Quest").onFirst().performClick()
+        compose.onNodeWithTag("quest_1").performScrollTo().performClick()
         compose.onNodeWithTag("tab_today").assertDoesNotExist()
-        compose.onNodeWithText("Start Quest").assertIsDisplayed()
+        compose.onNodeWithText("Start Quest").performScrollTo().assertIsDisplayed()
         compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         compose.onNodeWithTag("tab_today").assertIsSelected()
     }
@@ -47,7 +47,7 @@ class BottomNavigationTest {
         listOf("1" to "Walk 5 km", "2" to "Visit a new place", "3" to "Outdoor workout").forEach { (id, title) ->
             compose.onNodeWithTag("quest_$id").performScrollTo().performClick()
             compose.onNodeWithText(title).assertIsDisplayed()
-            compose.onNodeWithText("Add photo").assertIsDisplayed()
+            compose.onNodeWithText("Add photo").performScrollTo().assertIsDisplayed()
             compose.onNodeWithTag("tab_quests").assertDoesNotExist()
             if (id == "3") compose.onNodeWithText("Start Quest").assertIsNotEnabled()
             compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
@@ -55,11 +55,28 @@ class BottomNavigationTest {
         }
     }
 
+    @Test fun homeAndOverviewOpenGroupAndCreateJoinPages() {
+        signIn()
+        compose.onNodeWithTag("group_mountain-crew").performClick()
+        compose.onNodeWithText("Your group page will appear here.").assertIsDisplayed()
+        compose.onNodeWithText("‹ Back").performClick()
+        compose.onNodeWithTag("home_add_group").performClick()
+        compose.onNodeWithText("Create a new group").performClick()
+        compose.onNodeWithText("Create group").assertIsDisplayed()
+        compose.onNodeWithText("‹ Back").performClick()
+        compose.onNodeWithText("‹ Back").performClick()
+        compose.onNodeWithTag("tab_groups").performClick()
+        compose.onNodeWithText("3 members").assertIsDisplayed()
+        compose.onNodeWithText("+ Add new").performClick()
+        compose.onNodeWithText("Join a group with code").performClick()
+        compose.onNodeWithText("Join group").assertIsDisplayed()
+    }
+
     @Test fun tabSelectionSurvivesRecreation() {
         signIn()
         compose.onNodeWithTag("tab_groups").performClick()
         compose.activityRule.scenario.recreate()
         compose.onNodeWithTag("tab_groups").assertIsSelected()
-        compose.onNodeWithText("Your groups will appear here.").assertIsDisplayed()
+        compose.onNodeWithTag("group_mountain-crew").assertIsDisplayed()
     }
 }
