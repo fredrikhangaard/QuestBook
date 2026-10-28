@@ -15,6 +15,7 @@ import androidx.navigation.navArgument
 import no.ntnu.prog2007.questbook.location.GpsTestScreen
 import no.ntnu.prog2007.questbook.ui.login.CreateUserScreen
 import no.ntnu.prog2007.questbook.ui.login.LoginScreen
+import no.ntnu.prog2007.questbook.ui.photo.AddPhotoScreen
 import no.ntnu.prog2007.questbook.ui.quest.QuestScreen
 import no.ntnu.prog2007.questbook.ui.questbook.QuestBookScreen
 import no.ntnu.prog2007.questbook.ui.today.TodayScreen
@@ -92,7 +93,23 @@ fun QuestBookNavHost() {
                 )
             ) { backStackEntry ->
                 val questId = backStackEntry.arguments?.getString("questId").orEmpty()
-                QuestScreen(questId = questId)
+                QuestScreen(
+                    questId = questId,
+                    onAddPhotoClick = { navController.navigate("addphoto/$questId") }
+                )
+            }
+
+            composable(
+                route = "addphoto/{questId}",
+                arguments = listOf(
+                    navArgument("questId") { type = NavType.StringType }
+                )
+            ) { backStackEntry ->
+                val questId = backStackEntry.arguments?.getString("questId").orEmpty()
+                AddPhotoScreen(
+                    questId = questId,
+                    onDone = { navController.popBackStack() }
+                )
             }
 
             composable("questbook") {
