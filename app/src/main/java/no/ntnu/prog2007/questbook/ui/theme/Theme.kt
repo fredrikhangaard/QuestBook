@@ -1,6 +1,5 @@
 package no.ntnu.prog2007.questbook.ui.theme
 
-import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
@@ -12,28 +11,28 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
 
+/** Forest-green palette with readable surfaces in dark mode. */
 private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80,
-    background = Color(209, 224, 206)
+    primary = Color(0xFFABD3B5), onPrimary = Color(0xFF173B28),
+    secondary = Color(0xFFB5CCBA), onSecondary = Color(0xFF20392A),
+    secondaryContainer = Color(0xFF344D3C), onSecondaryContainer = Color(0xFFD0E9D5),
+    primaryContainer = Color(0xFF294D38), onPrimaryContainer = Color(0xFFCCEBD2),
+    background = Color(0xFF121713), onBackground = Color(0xFFE1E8E0),
+    surface = Color(0xFF1B231D), onSurface = Color(0xFFE1E8E0),
+    surfaceVariant = Color(0xFF303C33), onSurfaceVariant = Color(0xFFBFCABD),
+    outlineVariant = Color(0xFF3F4C42)
 )
 
+/** Near-white surfaces and restrained green accents from the QuestBook wireframes. */
 private val LightColorScheme = lightColorScheme(
-    primary = ButtonGreen40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40,
-    background = Color(209, 224, 206)
-
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
+    primary = Color(0xFF426B50), onPrimary = Color.White,
+    secondary = Color(0xFF526F5A), onSecondary = Color.White,
+    secondaryContainer = Color(0xFFE0EDE2), onSecondaryContainer = Color(0xFF24452F),
+    primaryContainer = Color(0xFFE0EDE2), onPrimaryContainer = Color(0xFF24452F),
+    background = Color(0xFFFAFBF9), onBackground = Color(0xFF1D2B22),
+    surface = Color.White, onSurface = Color(0xFF1D2B22),
+    surfaceVariant = Color(0xFFEDF1EB), onSurfaceVariant = Color(0xFF58655B),
+    outline = Color(0xFF78857A), outlineVariant = Color(0xFFDEE5DC)
 )
 
 @Composable
