@@ -1,6 +1,8 @@
 package no.ntnu.prog2007.questbook.ui.navigation
 
 import androidx.compose.foundation.layout.padding
+import androidx.compose.runtime.getValue
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
@@ -22,14 +24,28 @@ import no.ntnu.prog2007.questbook.ui.welcome.WelcomeScreen
 fun QuestBookNavHost() {
 
     val navController = rememberNavController()
-    val isLoggedIn = false
+    val entry by navController.currentBackStackEntryAsState()
+    val currentRoute = entry?.destination?.route
+
+    fun openTab(route: String) {
+        navController.navigate(route) {
+            popUpTo("today") { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = MaterialTheme.colorScheme.background,
+        bottomBar = {
+            if (bottomDestinations.any { it.route == currentRoute }) {
+                QuestBookBottomBar(currentRoute = currentRoute, onNavigate = ::openTab)
+            }
+        }
     ) { padding ->
         NavHost(
             navController = navController,
-            startDestination = if (isLoggedIn) "today" else "launch",
+            startDestination = "launch",
             modifier = Modifier.padding(padding)
         ) {
 
@@ -65,7 +81,7 @@ fun QuestBookNavHost() {
             composable("today") {
                 TodayScreen(
                     onQuestClick = { questId -> navController.navigate("quest/$questId") },
-                    onQuestBookClick = { navController.navigate("questbook") }
+                    onQuestBookClick = { openTab("questbook") }
                 )
             }
 
@@ -82,6 +98,10 @@ fun QuestBookNavHost() {
             composable("questbook") {
                 QuestBookScreen()
             }
+
+            composable("groups") { GroupsScreen() }
+            composable("quests") { QuestsScreen() }
+            composable("profile") { ProfileScreen() }
 
             composable("gps_test") {
                 GpsTestScreen()
