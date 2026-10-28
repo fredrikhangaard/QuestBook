@@ -16,6 +16,7 @@ import no.ntnu.prog2007.questbook.location.GpsTestScreen
 import no.ntnu.prog2007.questbook.ui.login.CreateUserScreen
 import no.ntnu.prog2007.questbook.ui.login.LoginScreen
 import no.ntnu.prog2007.questbook.ui.photo.AddPhotoScreen
+import no.ntnu.prog2007.questbook.ui.quest.QuestsScreen
 import no.ntnu.prog2007.questbook.ui.quest.QuestScreen
 import no.ntnu.prog2007.questbook.ui.questbook.QuestBookScreen
 import no.ntnu.prog2007.questbook.ui.today.TodayScreen
@@ -117,7 +118,11 @@ fun QuestBookNavHost() {
             }
 
             composable("groups") { GroupsScreen() }
-            composable("quests") { QuestsScreen() }
+            composable("quests") {
+                QuestsScreen(
+                    onQuestClick = { questId -> navController.navigate("quest/$questId") }
+                )
+            }
             composable("profile") { ProfileScreen() }
 
             composable("gps_test") {

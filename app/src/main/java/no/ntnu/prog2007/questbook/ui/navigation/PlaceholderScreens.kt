@@ -16,9 +16,6 @@ import androidx.compose.ui.unit.dp
 internal fun GroupsScreen() = PlaceholderPage("Groups", "Your groups will appear here.")
 
 @Composable
-internal fun QuestsScreen() = PlaceholderPage("Quests", "Your group's quests will appear here.")
-
-@Composable
 internal fun ProfileScreen() = PlaceholderPage("Profile", "Your profile and settings will appear here.")
 
 @Composable
