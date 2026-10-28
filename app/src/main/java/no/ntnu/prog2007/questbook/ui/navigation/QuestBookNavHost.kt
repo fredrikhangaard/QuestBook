@@ -2,6 +2,8 @@ package no.ntnu.prog2007.questbook.ui.navigation
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.viewmodel.compose.viewModel
+import no.ntnu.prog2007.questbook.ui.groups.*
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -26,9 +28,12 @@ import no.ntnu.prog2007.questbook.ui.welcome.WelcomeScreen
 fun QuestBookNavHost() {
 
     val navController = rememberNavController()
+    // One source supplies matching group summaries to Home, overview, and detail pages.
+    val groupsViewModel: GroupsViewModel = viewModel()
     val entry by navController.currentBackStackEntryAsState()
     val currentRoute = entry?.destination?.route
 
+    // Restore each tab without adding duplicate destinations to the back stack.
     fun openTab(route: String) {
         navController.navigate(route) {
             popUpTo("today") { saveState = true }
@@ -83,7 +88,11 @@ fun QuestBookNavHost() {
             composable("today") {
                 TodayScreen(
                     onQuestClick = { questId -> navController.navigate("quest/$questId") },
-                    onQuestBookClick = { openTab("questbook") }
+                    onQuestBookClick = { openTab("questbook") },
+                    onAllQuestsClick = { openTab("quests") },
+                    groups = groupsViewModel.groups,
+                    onGroupClick = { id -> navController.navigate("group/$id") },
+                    onAddGroup = { navController.navigate("addgroup") }
                 )
             }
 
@@ -96,7 +105,8 @@ fun QuestBookNavHost() {
                 val questId = backStackEntry.arguments?.getString("questId").orEmpty()
                 QuestScreen(
                     questId = questId,
-                    onAddPhotoClick = { navController.navigate("addphoto/$questId") }
+                    onAddPhotoClick = { navController.navigate("addphoto/$questId") },
+                    onBack = { navController.popBackStack() }
                 )
             }
 
@@ -117,7 +127,22 @@ fun QuestBookNavHost() {
                 QuestBookScreen()
             }
 
-            composable("groups") { GroupsScreen() }
+            composable("groups") {
+                GroupsScreen(groupsViewModel.groups,
+                    onGroupClick = { id -> navController.navigate("group/$id") },
+                    onAddGroup = { navController.navigate("addgroup") })
+            }
+            composable("group/{groupId}", arguments = listOf(navArgument("groupId") { type = NavType.StringType })) { entry ->
+                GroupDetailScreen(groupsViewModel.groups.find { it.id == entry.arguments?.getString("groupId") },
+                    onBack = { navController.popBackStack() })
+            }
+            composable("addgroup") {
+                AddGroupScreen(onBack = { navController.popBackStack() },
+                    onCreate = { navController.navigate("creategroup") },
+                    onJoin = { navController.navigate("joingroup") })
+            }
+            composable("creategroup") { GroupSetupPlaceholder(false) { navController.popBackStack() } }
+            composable("joingroup") { GroupSetupPlaceholder(true) { navController.popBackStack() } }
             composable("quests") {
                 QuestsScreen(
                     onQuestClick = { questId -> navController.navigate("quest/$questId") }
