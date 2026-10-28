@@ -13,9 +13,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 @Composable
-internal fun GroupsScreen() = PlaceholderPage("Groups", "Your groups will appear here.")
-
-@Composable
 internal fun ProfileScreen() = PlaceholderPage("Profile", "Your profile and settings will appear here.")
 
 @Composable
