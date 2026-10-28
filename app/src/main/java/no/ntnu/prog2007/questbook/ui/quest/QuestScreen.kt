@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -13,7 +14,10 @@ import androidx.compose.ui.unit.dp
 import no.ntnu.prog2007.questbook.data.repository.FakeQuestRepository
 
 @Composable
-fun QuestScreen(questId: String) {
+fun QuestScreen(
+    questId: String,
+    onAddPhotoClick: () -> Unit = {}
+) {
     val quest = FakeQuestRepository().getQuest(questId)
 
     Column(
@@ -41,6 +45,10 @@ fun QuestScreen(questId: String) {
             enabled = quest.status.name != "COMPLETED"
         ) {
             Text("Start Quest")
+        }
+
+        OutlinedButton(onClick = onAddPhotoClick) {
+            Text("Add photo")
         }
     }
 }
