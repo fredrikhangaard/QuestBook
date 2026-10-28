@@ -41,6 +41,20 @@ class BottomNavigationTest {
         compose.onNodeWithTag("tab_today").assertIsSelected()
     }
 
+    @Test fun questCardsOpenCorrectDetailsAndBackReturnsToQuests() {
+        signIn()
+        compose.onNodeWithTag("tab_quests").performClick()
+        listOf("1" to "Walk 5 km", "2" to "Visit a new place", "3" to "Outdoor workout").forEach { (id, title) ->
+            compose.onNodeWithTag("quest_$id").performScrollTo().performClick()
+            compose.onNodeWithText(title).assertIsDisplayed()
+            compose.onNodeWithText("Add photo").assertIsDisplayed()
+            compose.onNodeWithTag("tab_quests").assertDoesNotExist()
+            if (id == "3") compose.onNodeWithText("Start Quest").assertIsNotEnabled()
+            compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+            compose.onNodeWithTag("tab_quests").assertIsSelected()
+        }
+    }
+
     @Test fun tabSelectionSurvivesRecreation() {
         signIn()
         compose.onNodeWithTag("tab_groups").performClick()
