@@ -12,13 +12,17 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import no.ntnu.prog2007.questbook.data.repository.FakeQuestRepository
 import no.ntnu.prog2007.questbook.model.QuestStatus
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import no.ntnu.prog2007.questbook.data.repository.QuestDependencies
 
 /** Quest details arranged like the wireframe; tracking remains a separate integration task. */
 @Composable
 fun QuestScreen(questId: String, onAddPhotoClick: () -> Unit = {}, onBack: () -> Unit = {}) {
-    val quest = remember(questId) { FakeQuestRepository().getQuest(questId) }
+    val quests by QuestDependencies.questRepository.quests
+        .collectAsStateWithLifecycle()
+
+    val quest = quests.find { it.id == questId }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)) {
         // Keep an explicit Back action as well as Android's system Back navigation.
@@ -28,10 +32,12 @@ fun QuestScreen(questId: String, onAddPhotoClick: () -> Unit = {}, onBack: () ->
             return@Column
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            MemberAvatar(quest.assignedTo)
+            MemberAvatar(quest.assignedTo.ifBlank { "?" })
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(quest.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                Text("Assigned to ${quest.assignedTo}", style = MaterialTheme.typography.bodySmall,
+                Text(
+                    if (quest.assignedTo.isBlank()) "Unassigned"
+                    else "Assigned to ${quest.assignedTo}", style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(quest.status.displayName(), style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary)
@@ -72,7 +78,10 @@ fun QuestScreen(questId: String, onAddPhotoClick: () -> Unit = {}, onBack: () ->
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Spacer(Modifier.height(8.dp))
         // Preserve existing actions; photo navigation continues to the merged photo feature.
-        Button(onClick = {}, enabled = quest.status != QuestStatus.COMPLETED,
+        Button(
+            onClick = {},
+            enabled = quest.status != QuestStatus.COMPLETED &&
+                    quest.assignedTo.isNotBlank(),
             modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(10.dp)) {
             Text("Start Quest")
         }

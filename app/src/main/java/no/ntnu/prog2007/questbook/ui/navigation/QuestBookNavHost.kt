@@ -26,6 +26,8 @@ import no.ntnu.prog2007.questbook.ui.quest.QuestScreen
 import no.ntnu.prog2007.questbook.ui.questbook.QuestBookScreen
 import no.ntnu.prog2007.questbook.ui.today.TodayScreen
 import no.ntnu.prog2007.questbook.ui.welcome.WelcomeScreen
+import android.net.Uri
+import no.ntnu.prog2007.questbook.ui.quest.create.CreateQuestScreen
 
 @Composable
 fun QuestBookNavHost() {
@@ -141,10 +143,70 @@ fun QuestBookNavHost() {
                     onGroupClick = { id -> navController.navigate("group/$id") },
                     onAddGroup = { navController.navigate("addgroup") })
             }
-            composable("group/{groupId}", arguments = listOf(navArgument("groupId") { type = NavType.StringType })) { entry ->
-                GroupDetailScreen(groupsViewModel.groups.find { it.id == entry.arguments?.getString("groupId") },
-                    onBack = { navController.popBackStack() })
+            composable(
+                route = "group/{groupId}",
+                arguments = listOf(
+                    navArgument("groupId") {
+                        type = NavType.StringType
+                    }
+                )
+            ) { backStackEntry ->
+                val groupId = backStackEntry.arguments
+                    ?.getString("groupId")
+                    .orEmpty()
+
+                val group = groupsViewModel.groups.find {
+                    it.id == groupId
+                }
+
+                GroupDetailScreen(
+                    group = group,
+                    onBack = { navController.popBackStack() },
+                    onCreateQuest = {
+                        navController.navigate(
+                            "createquest/${Uri.encode(groupId)}"
+                        )
+                    },
+                    onQuestClick = { questId ->
+                        navController.navigate(
+                            "quest/${Uri.encode(questId)}"
+                        )
+                    }
+                )
             }
+
+            composable(
+                route = "createquest/{groupId}",
+                arguments = listOf(
+                    navArgument("groupId") {
+                        type = NavType.StringType
+                    }
+                )
+            ) { backStackEntry ->
+                val groupId = backStackEntry.arguments
+                    ?.getString("groupId")
+                    .orEmpty()
+
+                val group = groupsViewModel.groups.find {
+                    it.id == groupId
+                }
+
+                if (group == null) {
+                    androidx.compose.material3.TextButton(
+                        onClick = { navController.popBackStack() }
+                    ) {
+                        androidx.compose.material3.Text("Group not found. Go back")
+                    }
+                } else {
+                    CreateQuestScreen(
+                        groupId = group.id,
+                        groupName = group.name,
+                        onBack = { navController.popBackStack() },
+                        onCreated = { navController.popBackStack() }
+                    )
+                }
+            }
+
             composable("addgroup") {
                 AddGroupScreen(onBack = { navController.popBackStack() },
                     onCreate = { navController.navigate("creategroup") },
