@@ -12,11 +12,13 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import no.ntnu.prog2007.questbook.model.Quest
 import no.ntnu.prog2007.questbook.model.QuestStatus
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /** Displays sample quests with status filters and links to quest details. */
 @Composable
 fun QuestsScreen(onQuestClick: (String) -> Unit, questsViewModel: QuestsViewModel = viewModel()) {
-    QuestList(questsViewModel.quests, onQuestClick)
+    val quests by questsViewModel.quests.collectAsStateWithLifecycle()
+    QuestList(quests, onQuestClick)
 }
 
 /** Scrollable quest rows; filter selection survives tab switches and recreation. */
