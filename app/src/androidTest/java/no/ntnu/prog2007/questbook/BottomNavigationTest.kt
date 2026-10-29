@@ -2,11 +2,25 @@ package no.ntnu.prog2007.questbook
 
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import no.ntnu.prog2007.questbook.data.AppServices
+import no.ntnu.prog2007.questbook.data.auth.FakeAuthRepository
 import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.ExternalResource
 
 class BottomNavigationTest {
-    @get:Rule val compose = createAndroidComposeRule<MainActivity>()
+    /** Uses a fake login so the tests never talk to Firebase. Runs before the activity starts. */
+    @get:Rule(order = 0) val fakeAuth = object : ExternalResource() {
+        override fun before() {
+            AppServices.authRepository = FakeAuthRepository()
+        }
+
+        override fun after() {
+            AppServices.reset()
+        }
+    }
+
+    @get:Rule(order = 1) val compose = createAndroidComposeRule<MainActivity>()
 
     private fun signIn() {
         compose.onNodeWithTag("tab_today").assertDoesNotExist()
@@ -22,7 +36,7 @@ class BottomNavigationTest {
         listOf("groups", "quests", "questbook", "profile").forEach { route ->
             compose.onNodeWithTag("tab_$route").performClick().assertIsSelected()
         }
-        compose.onNodeWithText("Your profile and settings will appear here.").assertIsDisplayed()
+        compose.onNodeWithText("Log out").assertIsDisplayed()
         repeat(3) { compose.onNodeWithTag("tab_profile").performClick() }
         compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         compose.onNodeWithTag("tab_today").assertIsSelected()
