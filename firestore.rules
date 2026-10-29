@@ -1,0 +1,25 @@
+// Firestore security rules for QuestBook.
+// This file documents the rules. Paste them into Firebase console > Firestore > Rules to use them.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // User profiles. Any signed-in user can read them (group members need each other's
+    // names), but only the user can create or change their own profile.
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Quest photos. Only signed-in users. A new photo must belong to the user who uploads it.
+    // TODO: limit reading to members of the quest's group once groups are stored in Firestore.
+    match /photos/{photoId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+    }
+
+    // TODO: add rules for groups and quests when they are stored in Firestore.
+    // Anything not listed here is denied.
+  }
+}
