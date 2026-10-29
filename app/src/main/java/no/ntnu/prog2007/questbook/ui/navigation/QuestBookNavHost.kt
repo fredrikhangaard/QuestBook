@@ -2,6 +2,7 @@ package no.ntnu.prog2007.questbook.ui.navigation
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.lifecycle.viewmodel.compose.viewModel
 import no.ntnu.prog2007.questbook.ui.groups.*
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -14,10 +15,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import no.ntnu.prog2007.questbook.data.AppServices
 import no.ntnu.prog2007.questbook.location.GpsTestScreen
 import no.ntnu.prog2007.questbook.ui.login.CreateUserScreen
 import no.ntnu.prog2007.questbook.ui.login.LoginScreen
 import no.ntnu.prog2007.questbook.ui.photo.AddPhotoScreen
+import no.ntnu.prog2007.questbook.ui.profile.ProfileScreen
 import no.ntnu.prog2007.questbook.ui.quest.QuestsScreen
 import no.ntnu.prog2007.questbook.ui.quest.QuestScreen
 import no.ntnu.prog2007.questbook.ui.questbook.QuestBookScreen
@@ -32,6 +35,12 @@ fun QuestBookNavHost() {
     val groupsViewModel: GroupsViewModel = viewModel()
     val entry by navController.currentBackStackEntryAsState()
     val currentRoute = entry?.destination?.route
+
+    // Skip the welcome screen when Firebase remembers a signed-in user from last time.
+    // Saved, so the start screen stays the same when the activity is recreated.
+    val startDestination = rememberSaveable {
+        if (AppServices.authRepository.currentUserId != null) "today" else "launch"
+    }
 
     // Restore each tab without adding duplicate destinations to the back stack.
     fun openTab(route: String) {
@@ -52,7 +61,7 @@ fun QuestBookNavHost() {
     ) { padding ->
         NavHost(
             navController = navController,
-            startDestination = "launch",
+            startDestination = startDestination,
             modifier = Modifier.padding(padding)
         ) {
 
@@ -65,7 +74,7 @@ fun QuestBookNavHost() {
 
             composable("login") {
                 LoginScreen(
-                    onSignIn = { _, _ ->
+                    onSignedIn = {
                         navController.navigate("today") {
                             popUpTo("launch") { inclusive = true }
                         }
@@ -76,7 +85,7 @@ fun QuestBookNavHost() {
 
             composable("createuser") {
                 CreateUserScreen(
-                    onCreateUser = { _, _, _ ->
+                    onCreated = {
                         navController.navigate("today") {
                             popUpTo("launch") { inclusive = true }
                         }
@@ -148,7 +157,15 @@ fun QuestBookNavHost() {
                     onQuestClick = { questId -> navController.navigate("quest/$questId") }
                 )
             }
-            composable("profile") { ProfileScreen() }
+            composable("profile") {
+                ProfileScreen(
+                    onSignedOut = {
+                        navController.navigate("launch") {
+                            popUpTo(navController.graph.id) { inclusive = true }
+                        }
+                    }
+                )
+            }
 
             composable("gps_test") {
                 GpsTestScreen()
