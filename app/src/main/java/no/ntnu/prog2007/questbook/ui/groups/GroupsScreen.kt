@@ -9,6 +9,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import no.ntnu.prog2007.questbook.data.repository.QuestDependencies
+import no.ntnu.prog2007.questbook.ui.quest.QuestCard
 
 /** All current groups with more detail than the Home shortcuts. */
 @Composable
@@ -29,12 +33,81 @@ fun GroupsScreen(groups: List<GroupSummary>, onGroupClick: (String) -> Unit, onA
     }
 }
 
-/** Group landing page placeholder. Both Home and Groups open the same destination. */
+/** Displays the selected group's quests and creation action. */
 @Composable
-fun GroupDetailScreen(group: GroupSummary?, onBack: () -> Unit) {
-    Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-        TextButton(onClick = onBack) { Text("‹ Back") }
-        Text(group?.name ?: "Group not found", style = MaterialTheme.typography.titleLarge)
-        if (group != null) Text("Your group page will appear here.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+fun GroupDetailScreen(
+    group: GroupSummary?,
+    onBack: () -> Unit,
+    onCreateQuest: () -> Unit,
+    onQuestClick: (String) -> Unit
+) {
+    val allQuests by QuestDependencies.questRepository.quests
+        .collectAsStateWithLifecycle()
+
+    val groupQuests = allQuests.filter { it.groupId == group?.id }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            TextButton(onClick = onBack) {
+                Text("‹ Back")
+            }
+        }
+
+        if (group == null) {
+            item {
+                Text(
+                    "Group not found",
+                    style = MaterialTheme.typography.titleLarge
+                )
+            }
+        } else {
+            item {
+                Text(
+                    group.name,
+                    style = MaterialTheme.typography.titleLarge
+                )
+            }
+
+            item {
+                Text(
+                    group.members.joinToString(", "),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            item {
+                Button(
+                    onClick = onCreateQuest,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 52.dp)
+                ) {
+                    Text("+ Create quest")
+                }
+            }
+
+            item {
+                Text(
+                    "Group quests",
+                    style = MaterialTheme.typography.titleSmall
+                )
+            }
+
+            if (groupQuests.isEmpty()) {
+                item {
+                    Text("No quests yet. Create your group's first quest.")
+                }
+            }
+
+            items(groupQuests, key = { it.id }) { quest ->
+                QuestCard(quest) {
+                    onQuestClick(quest.id)
+                }
+            }
+        }
     }
 }

@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import no.ntnu.prog2007.questbook.R
 import no.ntnu.prog2007.questbook.model.Quest
 import no.ntnu.prog2007.questbook.model.QuestStatus
+import no.ntnu.prog2007.questbook.model.QuestType
 
 /** Human-readable status shared by quest rows and details. */
 internal fun QuestStatus.displayName() = when (this) {
@@ -35,13 +36,14 @@ internal fun MemberAvatar(name: String, modifier: Modifier = Modifier) {
     }
 }
 
-/** Uses the quest's distance requirement to choose its activity icon. */
+/** Uses the quest type to choose its activity icon. */
 @Composable
 internal fun QuestActivityIcon(quest: Quest, modifier: Modifier = Modifier) {
-    val icon = when {
-        quest.requiredDistanceKm != null -> R.drawable.ic_quest_walk
-        quest.title.contains("workout", ignoreCase = true) -> R.drawable.ic_quest_workout
-        else -> R.drawable.ic_quest_place
+    val icon = when (quest.type) {
+        QuestType.DISTANCE -> R.drawable.ic_quest_walk
+        QuestType.VISIT_PLACE -> R.drawable.ic_quest_place
+        QuestType.WORKOUT -> R.drawable.ic_quest_workout
+        QuestType.CUSTOM -> R.drawable.ic_nav_quests
     }
     val color = when (icon) {
         R.drawable.ic_quest_place -> Color(0xFFF8E3DF)
