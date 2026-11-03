@@ -25,6 +25,14 @@ interface GroupRepository {
     fun createGroup(ownerId: String, name: String, description: String): Group
 
     /**
+     * Adds [userId] to the group that has the invite code [code].
+     *
+     * Needs an internet connection, because the code must be checked with the server.
+     * Joining a group you are already in succeeds and changes nothing.
+     */
+    suspend fun joinGroup(userId: String, code: String): JoinOutcome
+
+    /**
      * Looks up the usernames of [userIds].
      *
      * @return a map from uid to username. Users whose name could not be loaded get "Unknown".

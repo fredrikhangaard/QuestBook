@@ -26,6 +26,14 @@ service cloud.firestore {
       allow create: if request.auth != null
         && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.memberIds == [request.auth.uid];
+
+      // Joining: a user who is not a member may add only themselves to memberIds, and must
+      // write the group's invite code under joinedWith.<their uid>. That proves they know the
+      // code, so nobody can join a group just by guessing its document id.
+      allow update: if request.auth != null
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds', 'joinedWith'])
+        && request.resource.data.memberIds.toSet() == resource.data.memberIds.toSet().union([request.auth.uid].toSet())
+        && request.resource.data.get('joinedWith', {}).get(request.auth.uid, '') == resource.data.inviteCode;
     }
 
     // Invite codes point to a group. A signed-in user can look up a code they already

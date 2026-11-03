@@ -224,7 +224,16 @@ fun QuestBookNavHost() {
                     }
                 )
             }
-            composable("joingroup") { GroupSetupPlaceholder(true) { navController.popBackStack() } }
+            composable("joingroup") {
+                JoinGroupScreen(
+                    onBack = { navController.popBackStack() },
+                    onJoined = { groupId ->
+                        navController.navigate("group/${Uri.encode(groupId)}") {
+                            popUpTo("addgroup") { inclusive = true }
+                        }
+                    }
+                )
+            }
             composable("quests") {
                 QuestsScreen(
                     onQuestClick = { questId -> navController.navigate("quest/$questId") }
