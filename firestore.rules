@@ -1,53 +1,101 @@
 // Firestore security rules for QuestBook.
-// This file documents the rules. Paste them into Firebase console > Firestore > Rules to use them.
+// This file documents the rules. To use them, paste them into
+// Firebase console > Firestore > Rules and press Publish. Anything not allowed here is denied.
+//
+// Private group data (PB-29):
+// - A group, its member list and its invite code can only be read by the group's members.
+// - Nobody can list groups or invite codes. A code can only be looked up by someone who knows it.
+// - Joining requires the invite code, and a user can only add themselves.
+// - Only the owner can rename or delete a group. Nobody can change the owner or the code.
+// - Profiles only hold a username, so other users never see someone's email address.
+//
+// Check by hand with two test accounts (or the Rules Playground in the console):
+// 1. User A creates a group. User B, not a member, reads groups/<id>: denied.
+// 2. User B joins with the code. User B reads groups/<id>: allowed.
+// 3. User B adds user C to memberIds: denied.
+// 4. User B changes ownerId, inviteCode or the name: denied.
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // User profiles. Any signed-in user can read them (group members need each other's
-    // names), but only the user can create or change their own profile.
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isUser(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    // Public profile: only the username, so group members can see each other's names.
     match /users/{userId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == userId;
+      allow read: if signedIn();
+      allow create, update: if isUser(userId)
+        && request.resource.data.keys().hasOnly(['username', 'createdAt'])
+        && request.resource.data.username is string
+        && request.resource.data.username.size() > 0
+        && request.resource.data.username.size() <= 30;
+      allow delete: if isUser(userId);
     }
 
-    // Quest photos. Only signed-in users. A new photo must belong to the user who uploads it.
-    // TODO: limit reading to members of the quest's group once groups are stored in Firestore.
-    match /photos/{photoId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
-    }
-
-    // Private groups. Only members can read a group. A new group must be owned by the
-    // user who creates it, and that user must be its only member.
+    // Private groups.
     match /groups/{groupId} {
-      allow read: if request.auth != null && request.auth.uid in resource.data.memberIds;
-      allow create: if request.auth != null
-        && request.resource.data.ownerId == request.auth.uid
-        && request.resource.data.memberIds == [request.auth.uid];
+      function isMember() {
+        return signedIn() && request.auth.uid in resource.data.memberIds;
+      }
 
-      // Joining: a user who is not a member may add only themselves to memberIds, and must
-      // write the group's invite code under joinedWith.<their uid>. That proves they know the
-      // code, so nobody can join a group just by guessing its document id.
-      allow update: if request.auth != null
+      function hasValidDetails(data) {
+        return data.name is string && data.name.size() > 0 && data.name.size() <= 40
+          && data.description is string && data.description.size() <= 200;
+      }
+
+      allow read: if isMember();
+
+      // A new group is owned by its creator, who is its only member.
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['name', 'description', 'inviteCode', 'ownerId', 'memberIds', 'createdAt'])
+        && hasValidDetails(request.resource.data)
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.memberIds == [request.auth.uid]
+        && request.resource.data.inviteCode is string
+        && request.resource.data.inviteCode.size() == 6;
+
+      // The owner may change the name and the description, nothing else.
+      allow update: if isUser(resource.data.ownerId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'description'])
+        && hasValidDetails(request.resource.data);
+
+      // Joining: a user may add only themselves to memberIds, and must write the group's
+      // invite code under joinedWith.<their uid>. That proves they know the code, so nobody
+      // can join a group just by guessing its document id.
+      allow update: if signedIn()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds', 'joinedWith'])
         && request.resource.data.memberIds.toSet() == resource.data.memberIds.toSet().union([request.auth.uid].toSet())
         && request.resource.data.get('joinedWith', {}).get(request.auth.uid, '') == resource.data.inviteCode;
+
+      allow delete: if isUser(resource.data.ownerId);
     }
 
-    // Invite codes point to a group. A signed-in user can look up a code they already
-    // know (get), but nobody can list the codes. Only the group's owner can create its
-    // code, together with the group, and a code can never be overwritten.
+    // Invite codes point to a group. A signed-in user can look up a code they already know
+    // (get), but nobody can list the codes. Only the group's owner can create the code,
+    // together with the group, and a code can never be overwritten.
     match /inviteCodes/{code} {
-      allow get: if request.auth != null;
-      allow create: if request.auth != null
+      allow get: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['groupId', 'createdBy'])
         && request.resource.data.createdBy == request.auth.uid
         && getAfter(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.ownerId == request.auth.uid
         && getAfter(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.inviteCode == code;
+      allow delete: if isUser(resource.data.createdBy);
+    }
+
+    // Quest photos. Only signed-in users. A new photo must belong to the user who uploads it.
+    // TODO: limit reading to members of the quest's group once quests are stored in Firestore.
+    match /photos/{photoId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if signedIn() && resource.data.userId == request.auth.uid;
     }
 
     // TODO: add rules for quests when they are stored in Firestore.
-    // Anything not listed here is denied.
   }
 }
