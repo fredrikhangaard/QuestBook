@@ -28,7 +28,7 @@ interface GroupRepository {
      * Adds [userId] to the group that has the invite code [code].
      *
      * Needs an internet connection, because the code must be checked with the server.
-     * Joining a group you are already in succeeds and changes nothing.
+     * Fails with [GroupError.ALREADY_MEMBER] if [userId] is already in the group.
      */
     suspend fun joinGroup(userId: String, code: String): JoinOutcome
 

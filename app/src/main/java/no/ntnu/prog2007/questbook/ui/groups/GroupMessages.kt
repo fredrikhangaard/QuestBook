@@ -18,6 +18,7 @@ internal fun GroupValidationError.toMessage(): String = when (this) {
 internal fun GroupError.toMessage(): String = when (this) {
     GroupError.INVALID_CODE -> "An invite code has ${InviteCode.LENGTH} letters and numbers."
     GroupError.CODE_NOT_FOUND -> "No group has that code. Check it and try again."
+    GroupError.ALREADY_MEMBER -> "You are already in this group."
     GroupError.NETWORK -> "No internet connection. You need to be online to join a group."
     GroupError.UNKNOWN -> "Something went wrong. Please try again."
 }

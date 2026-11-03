@@ -95,4 +95,21 @@ class JoinGroupViewModelTest {
         // Assert
         assertEquals("K7MQ2X", viewModel.uiState.value.code)
     }
+
+    @Test
+    fun onJoin_alreadyMember_showsAlreadyInGroupAndChangesNothing() {
+        // Arrange
+        val myGroup = friendsGroup.copy(memberIds = listOf("sara", "test-user"))
+        val groups = FakeGroupRepository(listOf(myGroup))
+        val viewModel = JoinGroupViewModel(FakeAuthRepository(signedIn = true), groups)
+        viewModel.onCodeChange("K7MQ2X")
+
+        // Act
+        viewModel.onJoin()
+
+        // Assert
+        assertNull(viewModel.uiState.value.joinedGroupId)
+        assertEquals(GroupError.ALREADY_MEMBER.toMessage(), viewModel.uiState.value.errorMessage)
+        assertEquals(listOf("sara", "test-user"), groups.allGroups.single().memberIds)
+    }
 }
