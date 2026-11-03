@@ -93,4 +93,18 @@ class GroupFlowTest {
         compose.onNodeWithTag("group_member_1").assertTextContains("Sara")
         compose.onNodeWithTag("group_member_1").assertTextContains("Owner")
     }
+
+    @Test
+    fun joinGroup_ownGroupsCode_saysAlreadyInGroup() {
+        // The test user's own group, whose code is K7MQ2X.
+        groups.createGroup("test-user", "Trail Runners", "")
+
+        compose.onNodeWithTag("home_add_group").performClick()
+        compose.onNodeWithText("Join a group with code").performClick()
+        compose.onNodeWithTag("join_group_code").performTextInput("K7MQ2X")
+        compose.onNodeWithTag("join_group_button").performClick()
+
+        compose.onNodeWithText("You are already in this group.").assertIsDisplayed()
+        compose.onNodeWithTag("join_group_code").assertIsDisplayed()
+    }
 }

@@ -96,6 +96,7 @@ class FirestoreGroupRepository(
             val invite = inviteCodes.document(normalized).get(Source.SERVER).await()
             val groupId = invite.getString(FIELD_GROUP_ID)
                 ?: return JoinOutcome.Failure(GroupError.CODE_NOT_FOUND)
+            if (isMember(groupId, userId)) return JoinOutcome.Failure(GroupError.ALREADY_MEMBER)
             // The rules only let a non-member add themselves, and only when they also
             // write the right invite code under joinedWith.<uid>.
             groups.document(groupId).update(
@@ -117,6 +118,18 @@ class FirestoreGroupRepository(
             JoinOutcome.Failure(GroupError.UNKNOWN)
         }
     }
+
+    /**
+     * Returns `true` if [userId] is already in the group. The rules only let members read a
+     * group, so for someone who is not a member the read is denied, which means "not a member".
+     */
+    private suspend fun isMember(groupId: String, userId: String): Boolean =
+        try {
+            val group = groups.document(groupId).get(Source.SERVER).await()
+            (group.get(FIELD_MEMBER_IDS) as? List<*>)?.contains(userId) == true
+        } catch (error: FirebaseFirestoreException) {
+            if (error.code == FirebaseFirestoreException.Code.PERMISSION_DENIED) false else throw error
+        }
 
     override suspend fun getUsernames(userIds: List<String>): Map<String, String> {
         val missing = userIds.distinct().filterNot { usernameCache.containsKey(it) }

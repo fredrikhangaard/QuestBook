@@ -62,10 +62,9 @@ class FakeGroupRepository(
         if (!InviteCode.isValid(normalized)) return JoinOutcome.Failure(GroupError.INVALID_CODE)
         val group = groups.value.find { it.inviteCode == normalized }
             ?: return JoinOutcome.Failure(GroupError.CODE_NOT_FOUND)
+        if (userId in group.memberIds) return JoinOutcome.Failure(GroupError.ALREADY_MEMBER)
         groups.update { all ->
-            all.map {
-                if (it.id == group.id && userId !in it.memberIds) it.copy(memberIds = it.memberIds + userId) else it
-            }
+            all.map { if (it.id == group.id) it.copy(memberIds = it.memberIds + userId) else it }
         }
         return JoinOutcome.Success(group.id)
     }

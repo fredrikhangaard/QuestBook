@@ -8,6 +8,9 @@ enum class GroupError {
     /** No group has this code. */
     CODE_NOT_FOUND,
 
+    /** The user is already a member of the group with this code. */
+    ALREADY_MEMBER,
+
     /** No internet connection. Joining needs to check the code with the server. */
     NETWORK,
 
