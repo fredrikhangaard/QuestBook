@@ -21,8 +21,10 @@ import no.ntnu.prog2007.questbook.model.User
 /**
  * [AuthRepository] backed by Firebase Authentication (email and password).
  *
- * The user's profile (username and email) is stored in the Firestore collection
- * `users`, in a document whose id is the user's uid. Firebase remembers the signed-in
+ * The user's public profile (only the username) is stored in the Firestore collection
+ * `users`, in a document whose id is the user's uid. Other signed-in users can read it, so
+ * the email address is deliberately not stored there; it stays in Firebase Authentication.
+ * Firebase remembers the signed-in
  * user between app starts, so [currentUserId] is already set when the app opens.
  */
 class FirebaseAuthRepository(
@@ -54,7 +56,6 @@ class FirebaseAuthRepository(
             val uid = checkNotNull(result.user?.uid) { "Firebase returned no user" }
             val profile = mapOf(
                 FIELD_USERNAME to username.trim(),
-                FIELD_EMAIL to email.trim(),
                 FIELD_CREATED_AT to FieldValue.serverTimestamp()
             )
             // Not awaited: Firestore saves the profile locally at once and uploads it when online.
@@ -111,7 +112,6 @@ class FirebaseAuthRepository(
         const val TAG = "FirebaseAuthRepo"
         const val USERS = "users"
         const val FIELD_USERNAME = "username"
-        const val FIELD_EMAIL = "email"
         const val FIELD_CREATED_AT = "createdAt"
     }
 }
