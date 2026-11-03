@@ -19,7 +19,27 @@ service cloud.firestore {
       allow update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
     }
 
-    // TODO: add rules for groups and quests when they are stored in Firestore.
+    // Private groups. Only members can read a group. A new group must be owned by the
+    // user who creates it, and that user must be its only member.
+    match /groups/{groupId} {
+      allow read: if request.auth != null && request.auth.uid in resource.data.memberIds;
+      allow create: if request.auth != null
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.memberIds == [request.auth.uid];
+    }
+
+    // Invite codes point to a group. A signed-in user can look up a code they already
+    // know (get), but nobody can list the codes. Only the group's owner can create its
+    // code, together with the group, and a code can never be overwritten.
+    match /inviteCodes/{code} {
+      allow get: if request.auth != null;
+      allow create: if request.auth != null
+        && request.resource.data.createdBy == request.auth.uid
+        && getAfter(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.ownerId == request.auth.uid
+        && getAfter(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.inviteCode == code;
+    }
+
+    // TODO: add rules for quests when they are stored in Firestore.
     // Anything not listed here is denied.
   }
 }

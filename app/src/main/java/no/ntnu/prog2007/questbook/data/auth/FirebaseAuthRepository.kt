@@ -11,6 +11,10 @@ import com.google.firebase.auth.FirebaseAuthWeakPasswordException
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import no.ntnu.prog2007.questbook.data.firebase.await
 import no.ntnu.prog2007.questbook.model.User
 
@@ -30,6 +34,15 @@ class FirebaseAuthRepository(
 
     override val currentUserId: String?
         get() = auth.currentUser?.uid
+
+    override val currentUserIdFlow: Flow<String?> = callbackFlow {
+        // Firebase calls the listener right away, and again on every sign-in and sign-out.
+        val listener = FirebaseAuth.AuthStateListener { firebaseAuth ->
+            trySend(firebaseAuth.currentUser?.uid)
+        }
+        auth.addAuthStateListener(listener)
+        awaitClose { auth.removeAuthStateListener(listener) }
+    }.distinctUntilChanged()
 
     override suspend fun signIn(email: String, password: String): AuthOutcome = attempt {
         auth.signInWithEmailAndPassword(email.trim(), password).await()

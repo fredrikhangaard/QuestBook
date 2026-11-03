@@ -3,6 +3,7 @@ package no.ntnu.prog2007.questbook.ui.navigation
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import no.ntnu.prog2007.questbook.ui.groups.*
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -35,6 +36,7 @@ fun QuestBookNavHost() {
     val navController = rememberNavController()
     // One source supplies matching group summaries to Home, overview, and detail pages.
     val groupsViewModel: GroupsViewModel = viewModel()
+    val groups by groupsViewModel.groups.collectAsStateWithLifecycle()
     val entry by navController.currentBackStackEntryAsState()
     val currentRoute = entry?.destination?.route
 
@@ -101,7 +103,7 @@ fun QuestBookNavHost() {
                     onQuestClick = { questId -> navController.navigate("quest/$questId") },
                     onQuestBookClick = { openTab("questbook") },
                     onAllQuestsClick = { openTab("quests") },
-                    groups = groupsViewModel.groups,
+                    groups = groups,
                     onGroupClick = { id -> navController.navigate("group/$id") },
                     onAddGroup = { navController.navigate("addgroup") }
                 )
@@ -139,7 +141,7 @@ fun QuestBookNavHost() {
             }
 
             composable("groups") {
-                GroupsScreen(groupsViewModel.groups,
+                GroupsScreen(groups,
                     onGroupClick = { id -> navController.navigate("group/$id") },
                     onAddGroup = { navController.navigate("addgroup") })
             }
@@ -155,7 +157,7 @@ fun QuestBookNavHost() {
                     ?.getString("groupId")
                     .orEmpty()
 
-                val group = groupsViewModel.groups.find {
+                val group = groups.find {
                     it.id == groupId
                 }
 
@@ -187,7 +189,7 @@ fun QuestBookNavHost() {
                     ?.getString("groupId")
                     .orEmpty()
 
-                val group = groupsViewModel.groups.find {
+                val group = groups.find {
                     it.id == groupId
                 }
 
@@ -212,7 +214,16 @@ fun QuestBookNavHost() {
                     onCreate = { navController.navigate("creategroup") },
                     onJoin = { navController.navigate("joingroup") })
             }
-            composable("creategroup") { GroupSetupPlaceholder(false) { navController.popBackStack() } }
+            composable("creategroup") {
+                CreateGroupScreen(
+                    onBack = { navController.popBackStack() },
+                    onCreated = { groupId ->
+                        navController.navigate("group/${Uri.encode(groupId)}") {
+                            popUpTo("addgroup") { inclusive = true }
+                        }
+                    }
+                )
+            }
             composable("joingroup") { GroupSetupPlaceholder(true) { navController.popBackStack() } }
             composable("quests") {
                 QuestsScreen(
