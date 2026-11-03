@@ -46,9 +46,34 @@ class GroupFlowTest {
         compose.onNodeWithTag("create_group_button").performClick()
 
         compose.onNodeWithText("Trail Runners").assertIsDisplayed()
+        compose.onNodeWithTag("group_invite_code").assertIsDisplayed()
 
         compose.onNodeWithText("‹ Back").performClick()
         compose.onNodeWithTag("tab_groups").performClick()
         compose.onNodeWithText("Trail Runners").assertIsDisplayed()
+    }
+
+    @Test
+    fun joinGroup_withFriendsCode_opensTheGroup() {
+        // A friend's group the test user is not a member of yet.
+        groups.createGroup("sara", "Weekend Walks", "")
+
+        compose.onNodeWithTag("home_add_group").performClick()
+        compose.onNodeWithText("Join a group with code").performClick()
+        compose.onNodeWithTag("join_group_code").performTextInput("k7m-q2x")
+        compose.onNodeWithTag("join_group_button").performClick()
+
+        compose.onNodeWithText("Weekend Walks").assertIsDisplayed()
+    }
+
+    @Test
+    fun joinGroup_wrongCode_showsErrorAndStays() {
+        compose.onNodeWithTag("home_add_group").performClick()
+        compose.onNodeWithText("Join a group with code").performClick()
+        compose.onNodeWithTag("join_group_code").performTextInput("ZZZZZZ")
+        compose.onNodeWithTag("join_group_button").performClick()
+
+        compose.onNodeWithText("No group has that code. Check it and try again.").assertIsDisplayed()
+        compose.onNodeWithTag("join_group_code").assertIsDisplayed()
     }
 }

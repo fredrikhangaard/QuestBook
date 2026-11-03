@@ -5,6 +5,8 @@ import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
+import com.google.firebase.firestore.Source
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.awaitClose
@@ -16,7 +18,7 @@ import no.ntnu.prog2007.questbook.model.Group
 /**
  * [GroupRepository] backed by Firestore.
  *
- * - `groups/{groupId}`: name, description, inviteCode, ownerId, memberIds, createdAt.
+ * - `groups/{groupId}`: name, description, inviteCode, ownerId, memberIds, joinedWith, createdAt.
  *   Only members can read a group (see `firestore.rules`).
  * - `inviteCodes/{code}`: groupId, createdBy. Lets a friend find the group from its code
  *   without being able to read or list any group they are not in.
@@ -86,6 +88,36 @@ class FirestoreGroupRepository(
         return group
     }
 
+    override suspend fun joinGroup(userId: String, code: String): JoinOutcome {
+        val normalized = InviteCode.normalize(code)
+        if (!InviteCode.isValid(normalized)) return JoinOutcome.Failure(GroupError.INVALID_CODE)
+        return try {
+            // Ask the server, not the local cache: the code must be checked against current data.
+            val invite = inviteCodes.document(normalized).get(Source.SERVER).await()
+            val groupId = invite.getString(FIELD_GROUP_ID)
+                ?: return JoinOutcome.Failure(GroupError.CODE_NOT_FOUND)
+            // The rules only let a non-member add themselves, and only when they also
+            // write the right invite code under joinedWith.<uid>.
+            groups.document(groupId).update(
+                mapOf<String, Any>(
+                    FIELD_MEMBER_IDS to FieldValue.arrayUnion(userId),
+                    "$FIELD_JOINED_WITH.$userId" to normalized
+                )
+            ).await()
+            JoinOutcome.Success(groupId)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: FirebaseFirestoreException) {
+            Log.w(TAG, "Could not join a group", error)
+            JoinOutcome.Failure(
+                if (error.code == FirebaseFirestoreException.Code.UNAVAILABLE) GroupError.NETWORK else GroupError.UNKNOWN
+            )
+        } catch (error: Exception) {
+            Log.w(TAG, "Could not join a group", error)
+            JoinOutcome.Failure(GroupError.UNKNOWN)
+        }
+    }
+
     override suspend fun getUsernames(userIds: List<String>): Map<String, String> {
         val missing = userIds.distinct().filterNot { usernameCache.containsKey(it) }
         // Firestore allows at most 30 ids in one "in" query.
@@ -126,6 +158,7 @@ class FirestoreGroupRepository(
         const val FIELD_INVITE_CODE = "inviteCode"
         const val FIELD_OWNER_ID = "ownerId"
         const val FIELD_MEMBER_IDS = "memberIds"
+        const val FIELD_JOINED_WITH = "joinedWith"
         const val FIELD_CREATED_AT = "createdAt"
         const val FIELD_GROUP_ID = "groupId"
         const val FIELD_CREATED_BY = "createdBy"

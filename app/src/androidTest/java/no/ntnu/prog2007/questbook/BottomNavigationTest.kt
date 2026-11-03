@@ -96,7 +96,7 @@ class BottomNavigationTest {
         compose.onNodeWithText("3 members").assertIsDisplayed()
         compose.onNodeWithText("+ Add new").performClick()
         compose.onNodeWithText("Join a group with code").performClick()
-        compose.onNodeWithText("Join group").assertIsDisplayed()
+        compose.onNodeWithTag("join_group_code").assertIsDisplayed()
     }
 
     @Test fun tabSelectionSurvivesRecreation() {

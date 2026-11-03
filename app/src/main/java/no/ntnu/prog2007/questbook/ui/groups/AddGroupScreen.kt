@@ -33,14 +33,3 @@ fun AddGroupScreen(onBack: () -> Unit, onCreate: () -> Unit, onJoin: () -> Unit)
             shape = RoundedCornerShape(10.dp)) { Text("Join a group with code") }
     }
 }
-
-/** Navigation placeholder until create/join services are implemented by the group feature. */
-@Composable
-fun GroupSetupPlaceholder(isJoining: Boolean, onBack: () -> Unit) {
-    Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-        TextButton(onClick = onBack) { Text("‹ Back") }
-        Text(if (isJoining) "Join group" else "Create group", style = MaterialTheme.typography.titleLarge)
-        Text(if (isJoining) "Joining a group with a code will be available here."
-            else "Group name, picture and setup will be available here.")
-    }
-}

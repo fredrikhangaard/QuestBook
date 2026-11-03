@@ -28,6 +28,13 @@ class FakeGroupRepository(
     var createCalls: Int = 0
         private set
 
+    /** How many times [joinGroup] has been called. */
+    var joinCalls: Int = 0
+        private set
+
+    /** If set, the next [joinGroup] call fails with this error, e.g. to test being offline. */
+    var nextJoinError: GroupError? = null
+
     override fun observeGroups(userId: String): Flow<List<Group>> =
         groups.map { all -> all.filter { userId in it.memberIds }.sortedBy { it.name.lowercase() } }
 
@@ -43,6 +50,24 @@ class FakeGroupRepository(
         )
         groups.update { it + group }
         return group
+    }
+
+    override suspend fun joinGroup(userId: String, code: String): JoinOutcome {
+        joinCalls++
+        nextJoinError?.let { error ->
+            nextJoinError = null
+            return JoinOutcome.Failure(error)
+        }
+        val normalized = InviteCode.normalize(code)
+        if (!InviteCode.isValid(normalized)) return JoinOutcome.Failure(GroupError.INVALID_CODE)
+        val group = groups.value.find { it.inviteCode == normalized }
+            ?: return JoinOutcome.Failure(GroupError.CODE_NOT_FOUND)
+        groups.update { all ->
+            all.map {
+                if (it.id == group.id && userId !in it.memberIds) it.copy(memberIds = it.memberIds + userId) else it
+            }
+        }
+        return JoinOutcome.Success(group.id)
     }
 
     override suspend fun getUsernames(userIds: List<String>): Map<String, String> =

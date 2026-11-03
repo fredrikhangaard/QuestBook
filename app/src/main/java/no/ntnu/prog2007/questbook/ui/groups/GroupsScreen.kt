@@ -77,6 +77,10 @@ fun GroupDetailScreen(
                 )
             }
 
+            if (group.inviteCode.isNotEmpty()) {
+                item { InviteCard(group.inviteCode) }
+            }
+
             item {
                 Button(
                     onClick = onCreateQuest,
