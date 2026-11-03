@@ -1,5 +1,7 @@
 package no.ntnu.prog2007.questbook.data.auth
 
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import no.ntnu.prog2007.questbook.model.User
 
 /**
@@ -20,25 +22,27 @@ class FakeAuthRepository(
     var attempts: Int = 0
         private set
 
-    private var signedInUid: String? = if (signedIn) user.uid else null
+    private val signedInUid = MutableStateFlow(if (signedIn) user.uid else null)
 
     override val currentUserId: String?
-        get() = signedInUid
+        get() = signedInUid.value
+
+    override val currentUserIdFlow: Flow<String?> = signedInUid
 
     override suspend fun signIn(email: String, password: String): AuthOutcome = attempt()
 
     override suspend fun createUser(username: String, email: String, password: String): AuthOutcome =
         attempt()
 
-    override suspend fun getCurrentUser(): User? = if (signedInUid != null) user else null
+    override suspend fun getCurrentUser(): User? = if (signedInUid.value != null) user else null
 
     override fun signOut() {
-        signedInUid = null
+        signedInUid.value = null
     }
 
     private fun attempt(): AuthOutcome {
         attempts++
-        if (nextOutcome == AuthOutcome.Success) signedInUid = user.uid
+        if (nextOutcome == AuthOutcome.Success) signedInUid.value = user.uid
         return nextOutcome
     }
 }

@@ -36,8 +36,6 @@ fun TodayScreen(
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("QuestBook", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                 HomeGroups(groups, onGroupClick, onAddGroup)
-                Text("Sample groups", style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
         }

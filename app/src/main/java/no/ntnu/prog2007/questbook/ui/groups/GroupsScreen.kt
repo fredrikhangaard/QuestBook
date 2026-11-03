@@ -13,6 +13,11 @@ import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import no.ntnu.prog2007.questbook.data.repository.QuestDependencies
 import no.ntnu.prog2007.questbook.ui.quest.QuestCard
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 
 /** All current groups with more detail than the Home shortcuts. */
 @Composable
@@ -25,8 +30,6 @@ fun GroupsScreen(groups: List<GroupSummary>, onGroupClick: (String) -> Unit, onA
                 Text("Groups", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                 TextButton(onClick = onAddGroup) { Text("+ Add new") }
             }
-            Text("Sample groups", style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (groups.isEmpty()) item { Text("You are not in a group yet.") }
         items(groups, key = { it.id }) { group -> GroupCard(group, detailed = true) { onGroupClick(group.id) } }
@@ -58,12 +61,7 @@ fun GroupDetailScreen(
         }
 
         if (group == null) {
-            item {
-                Text(
-                    "Group not found",
-                    style = MaterialTheme.typography.titleLarge
-                )
-            }
+            item { GroupLoadingOrMissing() }
         } else {
             item {
                 Text(
@@ -109,5 +107,23 @@ fun GroupDetailScreen(
                 }
             }
         }
+    }
+}
+
+/**
+ * Shown while a group is not in the list yet, e.g. right after it was created or joined
+ * and before Firestore has delivered it. Says "not found" only if it still is missing.
+ */
+@Composable
+private fun GroupLoadingOrMissing() {
+    var waitedLongEnough by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(2_000)
+        waitedLongEnough = true
+    }
+    if (waitedLongEnough) {
+        Text("Group not found", style = MaterialTheme.typography.titleLarge)
+    } else {
+        CircularProgressIndicator()
     }
 }
