@@ -1,6 +1,7 @@
 package no.ntnu.prog2007.questbook
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -17,7 +18,7 @@ import org.junit.rules.ExternalResource
 class GroupFlowTest {
 
     private val groups = FakeGroupRepository(
-        usernames = mapOf("test-user" to "Test User"),
+        usernames = mapOf("test-user" to "Test User", "sara" to "Sara"),
         newInviteCode = { "K7MQ2X" }
     )
 
@@ -51,6 +52,7 @@ class GroupFlowTest {
         compose.onNodeWithText("‹ Back").performClick()
         compose.onNodeWithTag("tab_groups").performClick()
         compose.onNodeWithText("Trail Runners").assertIsDisplayed()
+        compose.onNodeWithText("1 member").assertIsDisplayed()
     }
 
     @Test
@@ -75,5 +77,20 @@ class GroupFlowTest {
 
         compose.onNodeWithText("No group has that code. Check it and try again.").assertIsDisplayed()
         compose.onNodeWithTag("join_group_code").assertIsDisplayed()
+    }
+
+    @Test
+    fun groupPage_listsMembersWithYouFirstAndMarksTheOwner() {
+        // A friend's group the test user has joined.
+        groups.createGroup("sara", "Weekend Walks", "")
+        compose.onNodeWithTag("home_add_group").performClick()
+        compose.onNodeWithText("Join a group with code").performClick()
+        compose.onNodeWithTag("join_group_code").performTextInput("K7MQ2X")
+        compose.onNodeWithTag("join_group_button").performClick()
+
+        compose.onNodeWithText("2 members").assertIsDisplayed()
+        compose.onNodeWithTag("group_member_0").assertTextContains("You")
+        compose.onNodeWithTag("group_member_1").assertTextContains("Sara")
+        compose.onNodeWithTag("group_member_1").assertTextContains("Owner")
     }
 }

@@ -70,12 +70,16 @@ fun GroupDetailScreen(
                 )
             }
 
-            item {
-                Text(
-                    group.members.joinToString(", "),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            if (group.description.isNotEmpty()) {
+                item {
+                    Text(
+                        group.description,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
+
+            item { GroupMembersSection(group) }
 
             if (group.inviteCode.isNotEmpty()) {
                 item { InviteCard(group.inviteCode) }

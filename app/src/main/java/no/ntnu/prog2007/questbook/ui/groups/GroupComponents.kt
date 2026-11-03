@@ -43,7 +43,7 @@ internal fun GroupCard(group: GroupSummary, detailed: Boolean = false, onClick: 
                 Text(group.members.joinToString(", "), style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (detailed) {
-                    Text("${group.members.size} members", style = MaterialTheme.typography.labelMedium,
+                    Text(memberCountLabel(group.members.size), style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary)
                     Text(group.description, style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
