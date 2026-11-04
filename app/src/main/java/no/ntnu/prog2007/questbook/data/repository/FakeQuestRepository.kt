@@ -7,6 +7,7 @@ import no.ntnu.prog2007.questbook.model.Quest
 import no.ntnu.prog2007.questbook.model.QuestStatus
 import no.ntnu.prog2007.questbook.model.QuestType
 
+/** In-memory sample repository for tests and previews. */
 class FakeQuestRepository : QuestRepository {
 
     private val initialQuests = listOf(
@@ -48,7 +49,7 @@ class FakeQuestRepository : QuestRepository {
     override fun getQuest(id: String): Quest? =
         quests.value.find { it.id == id }
 
-    override fun addQuest(quest: Quest) {
+    override suspend fun addQuest(quest: Quest) {
         _quests.update { current ->
             require(current.none { it.id == quest.id }) {
                 "A quest with this ID already exists"

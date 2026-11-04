@@ -14,6 +14,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import no.ntnu.prog2007.questbook.model.QuestType
 
+/** Quest creation form for the selected group. */
 @Composable
 fun CreateQuestScreen(
     groupId: String,
@@ -24,13 +25,12 @@ fun CreateQuestScreen(
     val factory = remember(groupId) {
         CreateQuestViewModel.Factory(groupId)
     }
-
     val questViewModel: CreateQuestViewModel = viewModel(
         key = "createQuest_$groupId",
         factory = factory
     )
-
     val state by questViewModel.uiState.collectAsStateWithLifecycle()
+    val editable = !state.isSaving && !state.isSaved
 
     LaunchedEffect(state.isSaved) {
         if (state.isSaved) onCreated()
@@ -46,26 +46,18 @@ fun CreateQuestScreen(
     ) {
         TextButton(
             onClick = onBack,
+            enabled = editable,
             contentPadding = PaddingValues(0.dp)
         ) {
             Text("‹ Back")
         }
 
+        Text("Create quest", style = MaterialTheme.typography.titleLarge)
         Text(
-            text = "Create quest",
-            style = MaterialTheme.typography.titleLarge
-        )
-
-        Text(
-            text = groupName,
-            style = MaterialTheme.typography.bodyMedium,
+            groupName,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-
-        Text(
-            text = "Quest type",
-            style = MaterialTheme.typography.titleSmall
-        )
+        Text("Quest type", style = MaterialTheme.typography.titleSmall)
 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             QuestType.entries.chunked(2).forEach { types ->
@@ -76,9 +68,8 @@ fun CreateQuestScreen(
                     types.forEach { type ->
                         FilterChip(
                             selected = state.type == type,
-                            onClick = {
-                                questViewModel.onTypeChange(type)
-                            },
+                            enabled = editable,
+                            onClick = { questViewModel.onTypeChange(type) },
                             label = {
                                 Text(
                                     when (type) {
@@ -101,6 +92,7 @@ fun CreateQuestScreen(
         OutlinedTextField(
             value = state.title,
             onValueChange = questViewModel::onTitleChange,
+            enabled = editable,
             label = { Text("Title") },
             placeholder = { Text("e.g. Walk 5 km") },
             singleLine = true,
@@ -114,8 +106,8 @@ fun CreateQuestScreen(
         OutlinedTextField(
             value = state.description,
             onValueChange = questViewModel::onDescriptionChange,
+            enabled = editable,
             label = { Text("Description (optional)") },
-            placeholder = { Text("Describe the challenge") },
             minLines = 3,
             maxLines = 5,
             modifier = Modifier.fillMaxWidth()
@@ -125,6 +117,7 @@ fun CreateQuestScreen(
             OutlinedTextField(
                 value = state.distanceKm,
                 onValueChange = questViewModel::onDistanceChange,
+                enabled = editable,
                 label = { Text("Target distance") },
                 suffix = { Text("km") },
                 keyboardOptions = KeyboardOptions(
@@ -140,27 +133,24 @@ fun CreateQuestScreen(
         }
 
         Text(
-            text = "This quest will be added to $groupName without an assigned member.",
+            "This quest will be added to $groupName without an assigned member.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        state.saveError?.let { message ->
-            Text(
-                text = message,
-                color = MaterialTheme.colorScheme.error
-            )
+        state.saveError?.let {
+            Text(it, color = MaterialTheme.colorScheme.error)
         }
 
         Button(
             onClick = questViewModel::onCreateQuest,
-            enabled = !state.isSaved,
+            enabled = editable,
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 52.dp),
             shape = RoundedCornerShape(10.dp)
         ) {
-            Text("Create quest")
+            Text(if (state.isSaving) "Saving…" else "Create quest")
         }
     }
 }
