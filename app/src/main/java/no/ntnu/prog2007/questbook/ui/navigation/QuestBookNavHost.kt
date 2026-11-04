@@ -37,6 +37,8 @@ fun QuestBookNavHost() {
     // One source supplies matching group summaries to Home, overview, and detail pages.
     val groupsViewModel: GroupsViewModel = viewModel()
     val groups by groupsViewModel.groups.collectAsStateWithLifecycle()
+    // Observe quest changes too, so an asynchronously loaded quest gets its correct group in the picker.
+    val quests by no.ntnu.prog2007.questbook.data.repository.QuestDependencies.questRepository.quests.collectAsStateWithLifecycle()
     val entry by navController.currentBackStackEntryAsState()
     val currentRoute = entry?.destination?.route
 
@@ -119,7 +121,9 @@ fun QuestBookNavHost() {
                 QuestScreen(
                     questId = questId,
                     onAddPhotoClick = { navController.navigate("addphoto/$questId") },
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    canAccessGroup = { groupId -> groupsViewModel.groups.value.any { it.id == groupId } },
+                    group = groups.find { it.id == quests.find { quest -> quest.id == questId }?.groupId }
                 )
             }
 

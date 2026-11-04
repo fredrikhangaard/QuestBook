@@ -35,4 +35,13 @@ class RoomQuestRepository(
     override suspend fun addQuest(quest: Quest) {
         dao.insertQuest(QuestEntity.fromQuest(quest))
     }
+    override suspend fun assignQuest(questId: String, groupId: String, userId: String, displayName: String) {
+        require(questId.isNotBlank() && groupId.isNotBlank() && userId.isNotBlank() && displayName.isNotBlank()) {
+            "Choose a group member before assigning."
+        }
+        // Do not update a cached Quest object: the conditional DAO statement uses current database status.
+        check(dao.assignQuest(questId, groupId, userId, displayName.trim()) == 1) {
+            "The quest is missing or has already started. Refresh before assigning."
+        }
+    }
 }

@@ -57,4 +57,13 @@ class FakeQuestRepository : QuestRepository {
             current + quest
         }
     }
+    /** Mirrors the local repository's assignment restrictions for tests and previews. */
+    override suspend fun assignQuest(questId: String, groupId: String, userId: String, displayName: String) {
+        require(userId.isNotBlank() && displayName.isNotBlank())
+        _quests.update { current ->
+            val quest = checkNotNull(current.find { it.id == questId && it.groupId == groupId }) { "Quest not found." }
+            check(quest.status == QuestStatus.NOT_STARTED) { "The quest has already started." }
+            current.map { if (it.id == questId) it.copy(assignedUserId = userId, assignedTo = displayName.trim()) else it }
+        }
+    }
 }

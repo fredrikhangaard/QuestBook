@@ -76,4 +76,85 @@ class GpsRepositoryTest {
         assertTrue(state.distanceCompleted)
         assertEquals(1f, state.progress)
     }
+    @Test fun selectedTargetCompletesAndStopsWithoutAcceptingLatePoints() = runBlocking {
+        val source = Source()
+        val repository = GpsRepository(source, {}, Dispatchers.Unconfined)
+        try {
+            repository.startTracking(requiredDistanceMeters = 5.0)
+            source.emit(0.0, 1000)
+            source.emit(0.00005, 4000)
+            assertTrue(repository.state.value.distanceCompleted)
+            assertFalse(repository.state.value.isTracking)
+            assertEquals(1f, repository.state.value.progress)
+            val count = repository.state.value.pointCount
+            source.emit(0.0001, 7000)
+            assertEquals(count, repository.state.value.pointCount)
+            repository.flush()
+        } finally { repository.close() }
+    }
+
+    // A large position/time change while paused must not become part of the walking segment.
+    @Test fun resumeKeepsSessionAndExcludesPausedMovementAndTime() = runBlocking {
+        val source = Source()
+        var now = 0L
+        val repository = GpsRepository(source, {}, Dispatchers.Unconfined, clock = { now })
+        try {
+            repository.startTracking(requiredDistanceMeters = 100.0)
+            val id = repository.state.value.sessionId
+            source.emit(0.0, 1000)
+            now = 3000
+            source.emit(0.00005, 4000)
+            repository.stopTracking()
+            now = 30000
+            repository.resumeTracking()
+            source.emit(0.5, 31000)
+            assertEquals(5.56, repository.state.value.distanceMeters, 0.02)
+            now = 33000
+            source.emit(0.50005, 34000)
+            repository.stopTracking()
+            assertEquals(id, repository.state.value.sessionId)
+            assertEquals(11.12, repository.state.value.distanceMeters, 0.02)
+            assertEquals(6000L, repository.state.value.elapsedMillis)
+        } finally { repository.close() }
+    }
+
+    // Simulate a disk failure, then recover it; neither accepted point may be skipped or reordered.
+    @Test fun failedCheckpointRetriesBeforeFlushAndKeepsPointOrder() = runBlocking {
+        val source = Source()
+        var failing = true
+        val timestamps = mutableListOf<Long>()
+        val repository = GpsRepository(source, {}, Dispatchers.Unconfined,
+            persistCheckpoint = { point, _ ->
+                check(!failing) { "disk unavailable" }
+                point?.let { timestamps.add(it.timestamp) }
+            })
+        try {
+            repository.startTracking()
+            source.emit(0.0, 1000)
+            source.emit(0.00005, 4000)
+            assertNotNull(repository.state.value.persistenceError)
+            try { repository.flush(); fail("Flush must report the failed write") } catch (_: IllegalStateException) {}
+            failing = false
+            repository.flush()
+            assertNull(repository.state.value.persistenceError)
+            assertEquals(listOf(1000L, 4000L), timestamps)
+        } finally { repository.close() }
+    }
+
+    @Test fun restoredSessionResumesWithoutConnectingToOldPosition() = runBlocking {
+        val source = Source()
+        val repository = GpsRepository(source, {}, Dispatchers.Unconfined)
+        try {
+            repository.restore(GpsTrackingUiState(sessionId = "saved", requiredDistanceMeters = 100.0,
+                distanceMeters = 12.0, elapsedMillis = 9000,
+                routePoints = listOf(RoutePoint(0.0, 0.0, 1000, 5f))))
+            assertFalse(repository.state.value.isTracking)
+            repository.resumeTracking()
+            source.emit(0.5, 2000)
+            assertEquals(12.0, repository.state.value.distanceMeters, 0.0)
+            assertEquals("saved", repository.state.value.sessionId)
+            repository.stopTracking()
+        } finally { repository.close() }
+    }
+
 }

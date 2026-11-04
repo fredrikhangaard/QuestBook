@@ -15,4 +15,10 @@ interface QuestRepository {
 
     /** Returns only after the quest has been saved, or throws on failure. */
     suspend fun addQuest(quest: Quest)
+    /**
+     * Assigns a not-started quest to a member's real user ID and display-name snapshot.
+     * The caller validates current group membership; storage rejects a concurrent start.
+     * A Firestore implementation can later provide the same operation.
+     */
+    suspend fun assignQuest(questId: String, groupId: String, userId: String, displayName: String)
 }

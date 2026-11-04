@@ -36,4 +36,14 @@ interface QuestDao {
      */
     @Update
     suspend fun updateQuest(quest: QuestEntity): Int
+    /**
+     * Updates only assignment fields, preserving the target and any other quest information.
+     * The status condition is evaluated by SQLite at write time: if GPS started after the
+     * picker opened, the update affects zero rows instead of reassigning an active route.
+     */
+    @Query("""
+        UPDATE quests SET assignedUserId = :userId, assignedTo = :displayName
+        WHERE id = :questId AND groupId = :groupId AND status = 'NOT_STARTED'
+    """)
+    suspend fun assignQuest(questId: String, groupId: String, userId: String, displayName: String): Int
 }
