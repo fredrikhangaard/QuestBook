@@ -11,14 +11,20 @@ import com.google.firebase.auth.FirebaseAuthWeakPasswordException
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import no.ntnu.prog2007.questbook.data.firebase.await
 import no.ntnu.prog2007.questbook.model.User
 
 /**
  * [AuthRepository] backed by Firebase Authentication (email and password).
  *
- * The user's profile (username and email) is stored in the Firestore collection
- * `users`, in a document whose id is the user's uid. Firebase remembers the signed-in
+ * The user's public profile (only the username) is stored in the Firestore collection
+ * `users`, in a document whose id is the user's uid. Other signed-in users can read it, so
+ * the email address is deliberately not stored there; it stays in Firebase Authentication.
+ * Firebase remembers the signed-in
  * user between app starts, so [currentUserId] is already set when the app opens.
  */
 class FirebaseAuthRepository(
@@ -31,6 +37,15 @@ class FirebaseAuthRepository(
     override val currentUserId: String?
         get() = auth.currentUser?.uid
 
+    override val currentUserIdFlow: Flow<String?> = callbackFlow {
+        // Firebase calls the listener right away, and again on every sign-in and sign-out.
+        val listener = FirebaseAuth.AuthStateListener { firebaseAuth ->
+            trySend(firebaseAuth.currentUser?.uid)
+        }
+        auth.addAuthStateListener(listener)
+        awaitClose { auth.removeAuthStateListener(listener) }
+    }.distinctUntilChanged()
+
     override suspend fun signIn(email: String, password: String): AuthOutcome = attempt {
         auth.signInWithEmailAndPassword(email.trim(), password).await()
     }
@@ -41,7 +56,6 @@ class FirebaseAuthRepository(
             val uid = checkNotNull(result.user?.uid) { "Firebase returned no user" }
             val profile = mapOf(
                 FIELD_USERNAME to username.trim(),
-                FIELD_EMAIL to email.trim(),
                 FIELD_CREATED_AT to FieldValue.serverTimestamp()
             )
             // Not awaited: Firestore saves the profile locally at once and uploads it when online.
@@ -98,7 +112,6 @@ class FirebaseAuthRepository(
         const val TAG = "FirebaseAuthRepo"
         const val USERS = "users"
         const val FIELD_USERNAME = "username"
-        const val FIELD_EMAIL = "email"
         const val FIELD_CREATED_AT = "createdAt"
     }
 }

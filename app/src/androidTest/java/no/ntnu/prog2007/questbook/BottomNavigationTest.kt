@@ -4,6 +4,8 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import no.ntnu.prog2007.questbook.data.AppServices
 import no.ntnu.prog2007.questbook.data.auth.FakeAuthRepository
+import no.ntnu.prog2007.questbook.data.groups.FakeGroupRepository
+import no.ntnu.prog2007.questbook.model.Group
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.ExternalResource
@@ -13,6 +15,17 @@ class BottomNavigationTest {
     @get:Rule(order = 0) val fakeAuth = object : ExternalResource() {
         override fun before() {
             AppServices.authRepository = FakeAuthRepository()
+            AppServices.groupRepository = FakeGroupRepository(
+                initialGroups = listOf(
+                    Group(
+                        id = "mountain-crew", name = "Mountain Crew",
+                        description = "Outdoor adventures and quests together.",
+                        inviteCode = "K7MQ2X", ownerId = "emma",
+                        memberIds = listOf("emma", "jonas", "test-user")
+                    )
+                ),
+                usernames = mapOf("emma" to "Emma", "jonas" to "Jonas", "test-user" to "Test User")
+            )
         }
 
         override fun after() {
@@ -72,18 +85,18 @@ class BottomNavigationTest {
     @Test fun homeAndOverviewOpenGroupAndCreateJoinPages() {
         signIn()
         compose.onNodeWithTag("group_mountain-crew").performClick()
-        compose.onNodeWithText("Your group page will appear here.").assertIsDisplayed()
+        compose.onNodeWithText("Mountain Crew").assertIsDisplayed()
         compose.onNodeWithText("‹ Back").performClick()
         compose.onNodeWithTag("home_add_group").performClick()
         compose.onNodeWithText("Create a new group").performClick()
-        compose.onNodeWithText("Create group").assertIsDisplayed()
+        compose.onNodeWithTag("create_group_name").assertIsDisplayed()
         compose.onNodeWithText("‹ Back").performClick()
         compose.onNodeWithText("‹ Back").performClick()
         compose.onNodeWithTag("tab_groups").performClick()
         compose.onNodeWithText("3 members").assertIsDisplayed()
         compose.onNodeWithText("+ Add new").performClick()
         compose.onNodeWithText("Join a group with code").performClick()
-        compose.onNodeWithText("Join group").assertIsDisplayed()
+        compose.onNodeWithTag("join_group_code").assertIsDisplayed()
     }
 
     @Test fun tabSelectionSurvivesRecreation() {
