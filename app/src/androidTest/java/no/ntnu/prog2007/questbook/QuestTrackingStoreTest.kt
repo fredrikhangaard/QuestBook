@@ -70,8 +70,8 @@ class QuestTrackingStoreTest {
         } finally { db.close() }
     }
 
-    @Test fun upgradesFromVersionsOneAndTwoPreserveExistingRoutes() = runBlocking {
-        for (version in listOf(1, 2)) {
+    @Test fun upgradesFromVersionsOneTwoAndThreePreserveExistingRoutes() = runBlocking {
+        for (version in listOf(1, 2, 3)) {
             val name = "gps-upgrade-test-$version.db"
             context.deleteDatabase(name)
             // Build a real old-version database from its exported schema, then let Room migrate it.
@@ -83,9 +83,15 @@ class QuestTrackingStoreTest {
             for (index in 0 until entities.length()) {
                 val entity = entities.getJSONObject(index)
                 raw.execSQL(entity.getString("createSql").replace("\${TABLE_NAME}", entity.getString("tableName")))
+                // Exported schemas describe indexes separately; reproduce the full old database.
+                val indices = entity.optJSONArray("indices") ?: org.json.JSONArray()
+                for (i in 0 until indices.length()) {
+                    raw.execSQL(indices.getJSONObject(i).getString("createSql")
+                        .replace("\${TABLE_NAME}", entity.getString("tableName")))
+                }
             }
             raw.execSQL("INSERT INTO route_points (id, sessionId, latitude, longitude, timestamp, accuracy) VALUES (1, 'legacy', 1, 2, 1000, 5)")
-            if (version == 2) raw.execSQL("""
+            if (version >= 2) raw.execSQL("""
                 INSERT INTO quests (id, groupId, type, title, description, assignedTo, status, requiredDistanceKm,
                     createdByUserId, assignedUserId, createdAtMillis, startedAtMillis)
                 VALUES ('legacy-quest', 'group', 'DISTANCE', 'Old quest', '', 'Me', 'NOT_STARTED', 5, 'me', 'me', 0, NULL)
@@ -93,10 +99,10 @@ class QuestTrackingStoreTest {
             raw.version = version
             raw.close()
             val db = Room.databaseBuilder(context, QuestBookDatabase::class.java, name)
-                .addMigrations(QuestBookDatabase.MIGRATION_1_2, QuestBookDatabase.MIGRATION_2_3).build()
+                .addMigrations(QuestBookDatabase.MIGRATION_1_2, QuestBookDatabase.MIGRATION_2_3, QuestBookDatabase.MIGRATION_3_4).build()
             try {
                 assertEquals(1, db.routePointDao().getPointsForSession("legacy").first().size)
-                if (version == 2) assertEquals("Old quest", db.questDao().getQuest("legacy-quest")!!.title)
+                if (version >= 2) assertEquals("Old quest", db.questDao().getQuest("legacy-quest")!!.title)
                 assertTrue(db.trackingDao().observeResults("me").first().isEmpty())
             } finally { db.close(); context.deleteDatabase(name) }
         }
