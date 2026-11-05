@@ -15,10 +15,17 @@ class RoomSavedRouteReader(private val db: QuestBookDatabase) {
     suspend fun load(questId: String, userId: String): SavedRoute? {
         val result = db.trackingDao().getResult(questId)?.takeIf { it.userId == userId } ?: return null
         val points = result.gpsSessionId?.let { session ->
+            var pendingBreak = false
             db.routePointDao().getPointsForSession(session).first().mapNotNull { point ->
+                // Do not lose a boundary if its anchor is invalid and filtered from the preview.
+                pendingBreak = pendingBreak || point.startsSegment
                 if (point.latitude.isFinite() && point.longitude.isFinite()
-                    && point.latitude in -90.0..90.0 && point.longitude in -180.0..180.0)
-                    RoutePosition(point.latitude, point.longitude) else null
+                    && point.latitude in -90.0..90.0 && point.longitude in -180.0..180.0) {
+                    RoutePosition(point.latitude, point.longitude, pendingBreak).also { pendingBreak = false }
+                } else {
+                    pendingBreak = true
+                    null
+                }
             }
         }.orEmpty()
         return SavedRoute(result.toResult(), points)

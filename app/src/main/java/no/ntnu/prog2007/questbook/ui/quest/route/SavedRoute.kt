@@ -4,7 +4,14 @@ import kotlin.math.*
 import no.ntnu.prog2007.questbook.model.QuestResult
 
 /** Route positions use degrees; the preview coordinates below are approximate local metres. */
-data class RoutePosition(val latitude: Double, val longitude: Double)
+data class RoutePosition(val latitude: Double, val longitude: Double, val startsSegment: Boolean = false)
+
+/** A route always starts at its first point, including legacy routes with no boundary metadata. */
+fun routeSegmentRanges(points: List<RoutePosition>): List<IntRange> {
+    if (points.isEmpty()) return emptyList()
+    val starts = listOf(0) + points.indices.drop(1).filter { points[it].startsSegment }
+    return starts.mapIndexed { index, start -> start until starts.getOrElse(index + 1) { points.size } }
+}
 data class SavedRoute(val result: QuestResult, val points: List<RoutePosition>)
 data class PreviewPosition(val x: Double, val y: Double)
 

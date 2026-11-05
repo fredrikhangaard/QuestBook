@@ -13,3 +13,6 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Kotlin compiler session files are local build state.
+.kotlin/

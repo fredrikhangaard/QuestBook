@@ -220,7 +220,7 @@ class GpsRepository(
         mutableState.value = accepted.copy(status = if (accepted.distanceCompleted)
             "Distance requirement completed!" else "Receiving GPS updates")
         checkpoint(RoutePointEntity(sessionId = accepted.sessionId, latitude = point.latitude,
-            longitude = point.longitude, timestamp = point.timestamp, accuracy = point.accuracy))
+            longitude = point.longitude, timestamp = point.timestamp, accuracy = point.accuracy, startsSegment = previous == null))
         // The distance requirement is automatic, but saving completion remains an explicit action.
         if (accepted.distanceCompleted) stopTracking()
     }
