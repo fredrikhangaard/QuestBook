@@ -120,7 +120,8 @@ fun QuestBookNavHost() {
                 val questId = backStackEntry.arguments?.getString("questId").orEmpty()
                 QuestScreen(
                     questId = questId,
-                    onAddPhotoClick = { navController.navigate("addphoto/$questId") },
+                    onAddPhotoClick = { navController.navigate("addphoto/${Uri.encode(questId)}") },
+                    onMemoriesClick = { openTab("questbook") },
                     onBack = { navController.popBackStack() },
                     canAccessGroup = { groupId -> groupsViewModel.groups.value.any { it.id == groupId } },
                     group = groups.find { it.id == quests.find { quest -> quest.id == questId }?.groupId }
@@ -136,12 +137,12 @@ fun QuestBookNavHost() {
                 val questId = backStackEntry.arguments?.getString("questId").orEmpty()
                 AddPhotoScreen(
                     questId = questId,
-                    onDone = { navController.popBackStack() }
+                    onDone = { openTab("questbook") }
                 )
             }
 
             composable("questbook") {
-                QuestBookScreen()
+                QuestBookScreen(onQuestClick = { id -> navController.navigate("quest/${Uri.encode(id)}") })
             }
 
             composable("groups") {

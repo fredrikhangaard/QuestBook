@@ -11,9 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import no.ntnu.prog2007.questbook.data.photo.FirestorePhotoRepository
 import no.ntnu.prog2007.questbook.data.photo.ImageCompressor
-import no.ntnu.prog2007.questbook.data.photo.PhotoRepository
 import no.ntnu.prog2007.questbook.data.photo.PhotoTooLargeException
 
 /**
@@ -25,12 +23,12 @@ import no.ntnu.prog2007.questbook.data.photo.PhotoTooLargeException
  *
  * @param questId the quest the photo belongs to.
  * @param compressPhoto turns a picked image into small JPEG bytes (see [ImageCompressor]).
- * @param repository where the finished photo is saved.
+ * @param saveLocal awaits durable storage of the image and its result link.
  */
 class AddPhotoViewModel(
     private val questId: String,
     private val compressPhoto: suspend (Uri) -> ByteArray,
-    private val repository: PhotoRepository
+    private val saveLocal: suspend (ByteArray, String) -> Unit
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AddPhotoUiState())
@@ -73,16 +71,23 @@ class AddPhotoViewModel(
         val state = _uiState.value
         val photo = state.photo
         if (!state.canSave || photo == null) return
-        try {
-            repository.savePhoto(questId, photo.jpegBytes, state.caption.trim())
-            _uiState.update { it.copy(isSaved = true) }
-        } catch (_: Exception) {
-            _uiState.update { it.copy(errorMessage = "Could not save the photo.") }
+        _uiState.update { it.copy(isSaving = true, errorMessage = null) }
+        viewModelScope.launch {
+            try {
+                // Await the durable write before navigating away; a failed save stays retryable.
+                saveLocal(photo.jpegBytes, state.caption.trim())
+                _uiState.update { it.copy(isSaved = true, isSaving = false) }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                _uiState.update { it.copy(isSaving = false, errorMessage = "Could not save the photo. Complete your own quest first, then retry.") }
+            }
         }
     }
 
-    /** Creates an [AddPhotoViewModel] with the real image compressor and Firestore repository. */
-    class Factory(context: Context, private val questId: String) : ViewModelProvider.Factory {
+    /** Creates the real image compressor and a durable local result-linked saver.
+     * Cloud synchronization is intentionally separate from this completion flow. */
+    class Factory(private val context: Context, private val questId: String) : ViewModelProvider.Factory {
         private val compressor = ImageCompressor(context.applicationContext.contentResolver)
 
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -91,7 +96,12 @@ class AddPhotoViewModel(
             return AddPhotoViewModel(
                 questId = questId,
                 compressPhoto = { uri -> compressor.compress(uri) },
-                repository = FirestorePhotoRepository()
+                saveLocal = { bytes, caption ->
+                    no.ntnu.prog2007.questbook.data.photo.LocalMemoryPhotoStore(
+                        no.ntnu.prog2007.questbook.location.database.QuestBookDatabase.getDatabase(context),
+                        { no.ntnu.prog2007.questbook.data.AppServices.authRepository.currentUserId }
+                    ).save(questId, bytes, caption)
+                }
             ) as T
         }
     }

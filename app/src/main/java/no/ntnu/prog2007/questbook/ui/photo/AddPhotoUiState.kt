@@ -26,8 +26,9 @@ data class AddPhotoUiState(
     val caption: String = "",
     val isProcessing: Boolean = false,
     val isSaved: Boolean = false,
+    val isSaving: Boolean = false,
     val errorMessage: String? = null
 ) {
     /** The Save button is enabled only when there is a photo and nothing else is happening. */
-    val canSave: Boolean get() = photo != null && !isProcessing && !isSaved
+    val canSave: Boolean get() = photo != null && !isProcessing && !isSaving && !isSaved
 }
