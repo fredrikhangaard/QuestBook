@@ -14,16 +14,20 @@ import no.ntnu.prog2007.questbook.model.Quest
 import no.ntnu.prog2007.questbook.model.QuestStatus
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
-/** Displays sample quests with status filters and links to quest details. */
+/** Personal challenges and group quests share this tab without mixing ownership or assignment. */
 @Composable
-fun QuestsScreen(onQuestClick: (String) -> Unit, questsViewModel: QuestsViewModel = viewModel()) {
+fun QuestsScreen(onQuestClick: (String) -> Unit, questsViewModel: QuestsViewModel = viewModel(),
+    personalState: no.ntnu.prog2007.questbook.ui.personal.PersonalQuestsUiState? = null,
+    onPersonalQuest: (String) -> Unit = {}, onRefreshPersonal: () -> Unit = {}, onNewActivity: () -> Unit = {}) {
     val quests by questsViewModel.quests.collectAsStateWithLifecycle()
-    QuestList(quests, onQuestClick)
+    QuestList(quests, onQuestClick, personalState, onPersonalQuest, onRefreshPersonal, onNewActivity)
 }
 
 /** Scrollable quest rows; filter selection survives tab switches and recreation. */
 @Composable
-internal fun QuestList(quests: List<Quest>, onQuestClick: (String) -> Unit) {
+internal fun QuestList(quests: List<Quest>, onQuestClick: (String) -> Unit,
+    personalState: no.ntnu.prog2007.questbook.ui.personal.PersonalQuestsUiState? = null,
+    onPersonalQuest: (String) -> Unit = {}, onRefreshPersonal: () -> Unit = {}, onNewActivity: () -> Unit = {}) {
     var selectedFilter by rememberSaveable { mutableStateOf("All") }
     val visible = quests.filter {
         when (selectedFilter) {
@@ -36,10 +40,13 @@ internal fun QuestList(quests: List<Quest>, onQuestClick: (String) -> Unit) {
         modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        if (personalState != null) item {
+            no.ntnu.prog2007.questbook.ui.personal.PersonalQuestSection(personalState, onPersonalQuest, onRefreshPersonal, onNewActivity)
+        }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Quests", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                Text("Sample quests", style = MaterialTheme.typography.labelSmall,
+                Text("Group quests", style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 // FlowRow keeps controls usable with large accessibility fonts.
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

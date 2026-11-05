@@ -29,22 +29,26 @@ fun QuestBookScreen(onQuestClick: (String) -> Unit = {}, onRouteClick: ((String)
     val context = LocalContext.current
     val model: MemoriesViewModel = viewModel(factory = remember { MemoriesViewModel.Factory(context) })
     val state by model.state.collectAsStateWithLifecycle()
-    MemoriesContent(state, onRouteClick = onRouteClick, onQuestClick = onQuestClick)
+    MemoriesContent(state, onRouteClick = onRouteClick, onPreviousWeek = model::previousWeek, onNextWeek = model::nextWeek, onQuestClick = onQuestClick)
 }
 
 /** Stateless rendering allows previews and flow tests to use isolated data instead of real accounts. */
 @Composable
-fun MemoriesContent(state: MemoriesUiState, onRouteClick: ((String) -> Unit)? = null, onQuestClick: (String) -> Unit = {}) {
+fun MemoriesContent(state: MemoriesUiState, onRouteClick: ((String) -> Unit)? = null,
+    onPreviousWeek: () -> Unit = {}, onNextWeek: () -> Unit = {}, onQuestClick: (String) -> Unit = {}) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
             Text("Memories", style = MaterialTheme.typography.headlineMedium)
             Text("Your completed quests · Saved on this device", style = MaterialTheme.typography.bodySmall)
         }
+        state.summary?.let { summary -> item {
+            WeeklySummaryCard(summary, state.weekOffset, onPreviousWeek, onNextWeek)
+        } }
         if (state.loading) item { CircularProgressIndicator() }
         state.error?.let { message -> item { Text(message, color = MaterialTheme.colorScheme.error) } }
         if (!state.loading && state.error == null && state.results.isEmpty()) item {
-            Text("Your next adventure starts here", style = MaterialTheme.typography.titleLarge)
+            Text(if (state.summary != null) "No completed quests this week" else "Your next adventure starts here", style = MaterialTheme.typography.titleLarge)
             Text("Complete an assigned quest to save its result. Add a photo to remember the moment.")
         }
         items(state.results, key = { it.id }) { result ->
@@ -101,6 +105,10 @@ fun CompletionContent(result: QuestResult, onAddPhoto: () -> Unit, onDone: () ->
 /** Both screens use the same units and paused-time-aware duration snapshot. */
 @Composable
 internal fun ResultMetrics(result: QuestResult) {
+    if (result.distanceMeters == null && result.durationMillis == 0L) {
+        Text("Goal completed")
+        return
+    }
     val seconds = result.durationMillis / 1000
     Text("Time: %d:%02d".format(seconds / 60, seconds % 60))
     result.distanceMeters?.let { distance ->
@@ -108,6 +116,33 @@ internal fun ResultMetrics(result: QuestResult) {
         if (distance > 0) {
             val pace = (seconds / (distance / 1000)).toLong()
             Text("Average pace: %d:%02d /km".format(pace / 60, pace % 60))
+        }
+    }
+}
+
+
+/** Physical activity totals are counted once, while weekly achievements are reported separately. */
+@Composable
+private fun WeeklySummaryCard(summary: no.ntnu.prog2007.questbook.data.personal.WeeklyActivitySummary,
+    offset: Long, previous: () -> Unit, next: () -> Unit) {
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(if (offset == 0L) "This week's activity" else "Weekly activity", style = MaterialTheme.typography.titleLarge)
+            val format = java.text.SimpleDateFormat("d MMM", Locale.getDefault())
+            Text(format.format(Date(summary.start)) + " – " + format.format(Date(summary.end - 1)))
+            Text("Completed quests: ${summary.completedQuests}")
+            Text(String.format(Locale.US, "Distance: %.2f km", summary.distanceMeters / 1000))
+            Text("Active time: ${summary.activeMillis / 60000} min")
+            Text("Active days: ${summary.activeDays}")
+            Text("Bodyweight repetitions: ${summary.bodyweightReps}")
+            Text("Outdoor visits: ${summary.outdoorVisits}")
+            Text("Weekly goals completed: ${summary.weeklyGoals}")
+            Text("GPS and self-reported activities · Saved on this device", style = MaterialTheme.typography.bodySmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                TextButton(onClick = previous) { Text("Previous week") }
+                TextButton(onClick = next, enabled = offset < 0) { Text("Next week") }
+            }
         }
     }
 }

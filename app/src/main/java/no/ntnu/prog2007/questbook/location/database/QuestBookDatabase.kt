@@ -18,6 +18,7 @@ import no.ntnu.prog2007.questbook.data.local.QuestEntity
  * Version 3 adds resumable tracking sessions and saved quest results.
  * Version 4 adds local photos linked to completion results.
  * Version 5 records uninterrupted route sections on accepted GPS points.
+ * Version 6 adds solo daily/weekly assignments and manual activity entries.
  */
 @Database(
     entities = [
@@ -25,9 +26,11 @@ import no.ntnu.prog2007.questbook.data.local.QuestEntity
         QuestEntity::class,
         TrackingSessionEntity::class,
         QuestResultEntity::class,
-        no.ntnu.prog2007.questbook.data.photo.MemoryPhotoEntity::class
+        no.ntnu.prog2007.questbook.data.photo.MemoryPhotoEntity::class,
+        no.ntnu.prog2007.questbook.data.personal.PersonalQuestEntity::class,
+        no.ntnu.prog2007.questbook.data.personal.ActivityEntryEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = true
 )
 abstract class QuestBookDatabase : RoomDatabase() {
@@ -39,6 +42,8 @@ abstract class QuestBookDatabase : RoomDatabase() {
     abstract fun trackingDao(): TrackingDao
 
     abstract fun memoryPhotoDao(): no.ntnu.prog2007.questbook.data.photo.MemoryPhotoDao
+
+    abstract fun personalQuestDao(): no.ntnu.prog2007.questbook.data.personal.PersonalQuestDao
 
     companion object {
 
@@ -109,6 +114,23 @@ abstract class QuestBookDatabase : RoomDatabase() {
             }
         }
 
+        /** Adds personal assignments and self-reported activities, preserving all existing data. */
+        val MIGRATION_5_6: Migration = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""CREATE TABLE IF NOT EXISTS `personal_quests` (
+                    `questId` TEXT NOT NULL, `userId` TEXT NOT NULL, `templateId` TEXT NOT NULL,
+                    `cadence` TEXT NOT NULL, `periodKey` TEXT NOT NULL, `slot` TEXT NOT NULL,
+                    `title` TEXT NOT NULL, `description` TEXT NOT NULL, `metric` TEXT NOT NULL, `target` REAL NOT NULL,
+                    `periodStartMillis` INTEGER NOT NULL, `periodEndMillis` INTEGER NOT NULL, `zoneId` TEXT NOT NULL,
+                    `completedAtMillis` INTEGER, PRIMARY KEY(`questId`))""".trimIndent())
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_personal_quests_userId_cadence_periodKey_slot` ON `personal_quests` (`userId`, `cadence`, `periodKey`, `slot`)")
+                db.execSQL("""CREATE TABLE IF NOT EXISTS `activity_entries` (
+                    `id` TEXT NOT NULL, `userId` TEXT NOT NULL, `questId` TEXT NOT NULL,
+                    `occurredAtMillis` INTEGER NOT NULL, `distanceMeters` REAL NOT NULL, `activeMillis` INTEGER NOT NULL,
+                    `pushups` INTEGER NOT NULL, `squats` INTEGER NOT NULL, `visitKind` TEXT, PRIMARY KEY(`id`))""".trimIndent())
+            }
+        }
+
         /** Returns the database instance shared by the application. */
         fun getDatabase(context: Context): QuestBookDatabase {
             return INSTANCE ?: synchronized(this) {
@@ -117,7 +139,7 @@ abstract class QuestBookDatabase : RoomDatabase() {
                     QuestBookDatabase::class.java,
                     "questbook_gps_database"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     .build()
                     .also { INSTANCE = it }
             }

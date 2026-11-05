@@ -64,7 +64,7 @@ internal fun HomeGroups(groups: List<GroupSummary>, onGroupClick: (String) -> Un
             TextButton(onClick = onAddGroup, modifier = Modifier.testTag("home_add_group")) { Text("+ Add new") }
         }
         when (groups.size) {
-            0 -> Text("Join or create a group to get started.", style = MaterialTheme.typography.bodyMedium)
+            0 -> Text("Join friends for shared quests.", style = MaterialTheme.typography.bodyMedium)
             1 -> GroupCard(groups.single()) { onGroupClick(groups.single().id) }
             else -> LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 items(groups, key = { it.id }) { group ->

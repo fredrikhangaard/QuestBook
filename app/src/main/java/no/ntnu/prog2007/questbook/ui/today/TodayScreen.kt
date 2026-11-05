@@ -24,7 +24,9 @@ fun TodayScreen(
     onAllQuestsClick: () -> Unit = {},
     groups: List<GroupSummary> = emptyList(),
     onGroupClick: (String) -> Unit = {},
-    onAddGroup: () -> Unit = {}
+    onAddGroup: () -> Unit = {},
+    personalState: no.ntnu.prog2007.questbook.ui.personal.PersonalQuestsUiState? = null,
+    onPersonalQuest: (String) -> Unit = {}, onRefreshPersonal: () -> Unit = {}, onNewActivity: () -> Unit = {}
 ) {
     val uiState by todayViewModel.uiState.collectAsState()
     LazyColumn(
@@ -39,15 +41,19 @@ fun TodayScreen(
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
         }
+        if (personalState != null) item {
+            no.ntnu.prog2007.questbook.ui.personal.PersonalQuestSection(personalState, onPersonalQuest, onRefreshPersonal, onNewActivity)
+            HorizontalDivider(Modifier.padding(top = 16.dp))
+        }
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Active quests", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text("Group quests", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 TextButton(onClick = onAllQuestsClick) { Text("See all", style = MaterialTheme.typography.labelMedium) }
             }
         }
         // Cards retain the existing quest-detail navigation callbacks.
-        if (uiState.quests.isEmpty()) item { Text("No quests yet.") }
+        if (uiState.quests.isEmpty()) item { Text("No group quests yet.") }
         items(uiState.quests.filter { it.status != QuestStatus.COMPLETED }, key = { it.id }) { quest ->
             QuestCard(quest) { onQuestClick(quest.id) }
         }

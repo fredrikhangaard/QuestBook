@@ -84,7 +84,8 @@ fun QuestScreen(questId: String, onAddPhotoClick: () -> Unit = {}, onBack: () ->
         verticalArrangement = Arrangement.spacedBy(20.dp)) {
         // Keep an explicit Back action as well as Android's system Back navigation.
         TextButton(onClick = onBack, contentPadding = PaddingValues(0.dp)) { Text("‹  Back") }
-        if (quest == null) {
+        if (quest == null || (no.ntnu.prog2007.questbook.data.personal.PersonalQuestIds.isPersonalGroup(quest.groupId)
+                && quest.assignedUserId != AppServices.authRepository.currentUserId)) {
             Text("Quest not found", style = MaterialTheme.typography.titleLarge)
             return@Column
         }
@@ -107,7 +108,7 @@ fun QuestScreen(questId: String, onAddPhotoClick: () -> Unit = {}, onBack: () ->
             }
         }
         // Assignment is available to group members only before tracking has started.
-        if (quest.status == QuestStatus.NOT_STARTED && hasGroupAccess) {
+        if (quest.status == QuestStatus.NOT_STARTED && hasGroupAccess && !no.ntnu.prog2007.questbook.data.personal.PersonalQuestIds.isPersonalGroup(quest.groupId)) {
             OutlinedButton(onClick = assignment::open,
                 enabled = !trackingUi.isBusy && !assignmentUi.isSaving,
                 modifier = Modifier.fillMaxWidth()) {

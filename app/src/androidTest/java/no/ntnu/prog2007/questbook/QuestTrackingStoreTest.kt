@@ -71,8 +71,8 @@ class QuestTrackingStoreTest {
         } finally { db.close() }
     }
 
-    @Test fun upgradesFromVersionsOneThroughFourPreserveExistingRoutes() = runBlocking {
-        for (version in listOf(1, 2, 3, 4)) {
+    @Test fun upgradesFromVersionsOneThroughFivePreserveExistingRoutes() = runBlocking {
+        for (version in listOf(1, 2, 3, 4, 5)) {
             val name = "gps-upgrade-test-$version.db"
             context.deleteDatabase(name)
             // Build a real old-version database from its exported schema, then let Room migrate it.
@@ -105,7 +105,7 @@ class QuestTrackingStoreTest {
             raw.version = version
             raw.close()
             val db = Room.databaseBuilder(context, QuestBookDatabase::class.java, name)
-                .addMigrations(QuestBookDatabase.MIGRATION_1_2, QuestBookDatabase.MIGRATION_2_3, QuestBookDatabase.MIGRATION_3_4, QuestBookDatabase.MIGRATION_4_5).build()
+                .addMigrations(QuestBookDatabase.MIGRATION_1_2, QuestBookDatabase.MIGRATION_2_3, QuestBookDatabase.MIGRATION_3_4, QuestBookDatabase.MIGRATION_4_5, QuestBookDatabase.MIGRATION_5_6).build()
             try {
                 val legacy = db.routePointDao().getPointsForSession("legacy").first()
                 assertEquals(1, legacy.size)

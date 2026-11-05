@@ -28,6 +28,12 @@ interface TrackingDao {
     /** Database uniqueness also guards against duplicate saves outside the ViewModel. */
     @Insert suspend fun insertResult(result: QuestResultEntity)
 
+    @Query("SELECT * FROM quest_results WHERE userId = :userId ORDER BY completedAtMillis DESC")
+    suspend fun getResults(userId: String): List<QuestResultEntity>
+
+    @Query("SELECT * FROM tracking_sessions WHERE userId = :userId")
+    suspend fun getSessions(userId: String): List<TrackingSessionEntity>
+
     /** User-scoped local history, ready for a later Memories integration. */
     @Query("SELECT * FROM quest_results WHERE userId = :userId ORDER BY completedAtMillis DESC")
     fun observeResults(userId: String): Flow<List<QuestResultEntity>>
