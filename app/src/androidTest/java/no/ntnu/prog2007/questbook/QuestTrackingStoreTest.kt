@@ -4,7 +4,8 @@ import androidx.room.Room
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import no.ntnu.prog2007.questbook.data.repository.RoomQuestRepository
 import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.flow.first
@@ -70,8 +71,8 @@ class QuestTrackingStoreTest {
         } finally { db.close() }
     }
 
-    @Test fun upgradesFromVersionsOneTwoAndThreePreserveExistingRoutes() = runBlocking {
-        for (version in listOf(1, 2, 3)) {
+    @Test fun upgradesFromVersionsOneThroughFourPreserveExistingRoutes() = runBlocking {
+        for (version in listOf(1, 2, 3, 4)) {
             val name = "gps-upgrade-test-$version.db"
             context.deleteDatabase(name)
             // Build a real old-version database from its exported schema, then let Room migrate it.
@@ -96,14 +97,27 @@ class QuestTrackingStoreTest {
                     createdByUserId, assignedUserId, createdAtMillis, startedAtMillis)
                 VALUES ('legacy-quest', 'group', 'DISTANCE', 'Old quest', '', 'Me', 'NOT_STARTED', 5, 'me', 'me', 0, NULL)
             """.trimIndent())
+            if (version >= 3) {
+                raw.execSQL("INSERT INTO tracking_sessions VALUES ('legacy-quest', 'legacy', 'me', 1000, 0, 100, 2000)")
+                raw.execSQL("INSERT INTO quest_results VALUES ('legacy-result', 'done', 'group', 'me', 'Old result', 'Me', 5000, 2000, 100, 'old-route')")
+            }
+            if (version >= 4) raw.execSQL("INSERT INTO memory_photos VALUES ('photo', 'legacy-result', 'done', 'group', 'me', 'Old photo', X'010203', 5000)")
             raw.version = version
             raw.close()
             val db = Room.databaseBuilder(context, QuestBookDatabase::class.java, name)
-                .addMigrations(QuestBookDatabase.MIGRATION_1_2, QuestBookDatabase.MIGRATION_2_3, QuestBookDatabase.MIGRATION_3_4).build()
+                .addMigrations(QuestBookDatabase.MIGRATION_1_2, QuestBookDatabase.MIGRATION_2_3, QuestBookDatabase.MIGRATION_3_4, QuestBookDatabase.MIGRATION_4_5).build()
             try {
-                assertEquals(1, db.routePointDao().getPointsForSession("legacy").first().size)
+                val legacy = db.routePointDao().getPointsForSession("legacy").first()
+                assertEquals(1, legacy.size)
+                assertFalse(legacy.single().startsSegment)
                 if (version >= 2) assertEquals("Old quest", db.questDao().getQuest("legacy-quest")!!.title)
-                assertTrue(db.trackingDao().observeResults("me").first().isEmpty())
+                if (version >= 3) {
+                    assertEquals(100.0, db.trackingDao().getSession("legacy-quest")!!.distanceMeters, 0.0)
+                    assertEquals("Old result", db.trackingDao().getResult("done")!!.questTitle)
+                } else assertTrue(db.trackingDao().observeResults("me").first().isEmpty())
+                if (version >= 4) {
+                    assertArrayEquals(byteArrayOf(1, 2, 3), db.memoryPhotoDao().observePhotos("me").first().single().jpegBytes)
+                }
             } finally { db.close(); context.deleteDatabase(name) }
         }
     }
@@ -128,7 +142,11 @@ class QuestTrackingStoreTest {
             store.finish("quest", "me", state.sessionId, 2000)
             try { repo.assignQuest("quest", "group", "other", "Other"); fail("Already completed") } catch (_: IllegalStateException) {}
             assertEquals("me", db.questDao().getQuest("quest")!!.assignedUserId)
-        } finally { scope.cancel(); db.close() }
+        } finally {
+            // Wait for the repository's observer to finish before closing its SQLite connection.
+            scope.coroutineContext[Job]!!.cancelAndJoin()
+            db.close()
+        }
     }
 
 }

@@ -87,4 +87,23 @@ class SavedRouteScreenTest {
         compose.onNodeWithText("This completed quest is not available for your account on this device.").assertExists()
         compose.onNodeWithText("Walk by the lake").assertDoesNotExist()
     }
+    @Test fun pausedMovementIsShownAsAGapBetweenTrackedSections() {
+        val segmented = route.copy(points = listOf(
+            RoutePosition(60.8000, 10.6800, startsSegment = true), RoutePosition(60.7994, 10.6807),
+            RoutePosition(60.7984, 10.6830, startsSegment = true), RoutePosition(60.7978, 10.6837)))
+        compose.setContent {
+            QuestBookTheme(darkTheme = false) {
+                Scaffold { padding ->
+                    androidx.compose.foundation.layout.Box(Modifier.padding(padding)) {
+                        SavedRouteContent(SavedRouteUiState(false, segmented), {})
+                    }
+                }
+            }
+        }
+        compose.onNodeWithText("2 tracked sections").assertExists()
+        compose.onNodeWithText("Movement while paused is not connected.").assertExists()
+        compose.onNodeWithText("Distance: 5.10 km").assertExists()
+        capture("03-route-segments")
+    }
+
 }

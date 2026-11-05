@@ -30,4 +30,18 @@ class SavedRouteReaderTest {
             assertNotNull(db.trackingDao().getResult("quest"))
         } finally { db.close() }
     }
+    @Test fun aFilteredAnchorDoesNotLoseItsSegmentBoundary() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val db = Room.inMemoryDatabaseBuilder(context, QuestBookDatabase::class.java).build()
+        try {
+            db.trackingDao().insertResult(QuestResultEntity("r", "q", "g", "me", "Walk", "Me", 5000, 2000, 10.0, "s"))
+            val dao = db.routePointDao()
+            dao.insertPoint(RoutePointEntity(sessionId = "s", latitude = 60.0, longitude = 10.0, timestamp = 1000, accuracy = 5f))
+            dao.insertPoint(RoutePointEntity(sessionId = "s", latitude = 100.0, longitude = 10.0, timestamp = 2000, accuracy = 5f, startsSegment = true))
+            dao.insertPoint(RoutePointEntity(sessionId = "s", latitude = 60.1, longitude = 10.1, timestamp = 3000, accuracy = 5f))
+            val route = RoomSavedRouteReader(db).load("q", "me")!!
+            assertEquals(listOf(0..0, 1..1), routeSegmentRanges(route.points))
+        } finally { db.close() }
+    }
+
 }

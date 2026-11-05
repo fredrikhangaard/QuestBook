@@ -97,7 +97,8 @@ class GpsRepositoryTest {
     @Test fun resumeKeepsSessionAndExcludesPausedMovementAndTime() = runBlocking {
         val source = Source()
         var now = 0L
-        val repository = GpsRepository(source, {}, Dispatchers.Unconfined, clock = { now })
+        val saved = mutableListOf<RoutePointEntity>()
+        val repository = GpsRepository(source, { saved += it }, Dispatchers.Unconfined, clock = { now })
         try {
             repository.startTracking(requiredDistanceMeters = 100.0)
             val id = repository.state.value.sessionId
@@ -115,6 +116,8 @@ class GpsRepositoryTest {
             assertEquals(id, repository.state.value.sessionId)
             assertEquals(11.12, repository.state.value.distanceMeters, 0.02)
             assertEquals(6000L, repository.state.value.elapsedMillis)
+            repository.flush()
+            assertEquals(listOf(true, false, true, false), saved.map { it.startsSegment })
         } finally { repository.close() }
     }
 
@@ -123,10 +126,11 @@ class GpsRepositoryTest {
         val source = Source()
         var failing = true
         val timestamps = mutableListOf<Long>()
+        val boundaries = mutableListOf<Boolean>()
         val repository = GpsRepository(source, {}, Dispatchers.Unconfined,
             persistCheckpoint = { point, _ ->
                 check(!failing) { "disk unavailable" }
-                point?.let { timestamps.add(it.timestamp) }
+                point?.let { timestamps.add(it.timestamp); boundaries.add(it.startsSegment) }
             })
         try {
             repository.startTracking()
@@ -138,12 +142,14 @@ class GpsRepositoryTest {
             repository.flush()
             assertNull(repository.state.value.persistenceError)
             assertEquals(listOf(1000L, 4000L), timestamps)
+            assertEquals(listOf(true, false), boundaries)
         } finally { repository.close() }
     }
 
     @Test fun restoredSessionResumesWithoutConnectingToOldPosition() = runBlocking {
         val source = Source()
-        val repository = GpsRepository(source, {}, Dispatchers.Unconfined)
+        val saved = mutableListOf<RoutePointEntity>()
+        val repository = GpsRepository(source, { saved += it }, Dispatchers.Unconfined)
         try {
             repository.restore(GpsTrackingUiState(sessionId = "saved", requiredDistanceMeters = 100.0,
                 distanceMeters = 12.0, elapsedMillis = 9000,
@@ -154,6 +160,29 @@ class GpsRepositoryTest {
             assertEquals(12.0, repository.state.value.distanceMeters, 0.0)
             assertEquals("saved", repository.state.value.sessionId)
             repository.stopTracking()
+            repository.flush()
+            assertTrue(saved.single().startsSegment)
+        } finally { repository.close() }
+    }
+
+    @Test fun rejectedResumeFixesDoNotConsumeTheNewSegmentBoundary() = runBlocking {
+        val source = Source()
+        val saved = mutableListOf<RoutePointEntity>()
+        val repository = GpsRepository(source, { saved += it }, Dispatchers.Unconfined)
+        try {
+            repository.startTracking()
+            source.emit(0.0, 1000)
+            repository.stopTracking()
+            repository.resumeTracking()
+            source.emit(0.5, 2000, accuracy = 50f) // Rejected: still waiting for an anchor.
+            source.emit(0.5, 900) // Rejected: globally out of order after resume.
+            source.emit(0.5, 3000)
+            source.emit(0.50005, 6000)
+            repository.stopTracking()
+            repository.flush()
+            assertEquals(listOf(1000L, 3000L, 6000L), saved.map { it.timestamp })
+            assertEquals(listOf(true, true, false), saved.map { it.startsSegment })
+            assertEquals(5.56, repository.state.value.distanceMeters, 0.02)
         } finally { repository.close() }
     }
 
