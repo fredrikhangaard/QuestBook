@@ -17,10 +17,11 @@ class CompletionScreenTest {
     @Test fun savedStatsAndBothNextStepsAreAvailable() {
         var photo = false
         var memories = false
+        var route = false
         compose.setContent {
             MaterialTheme {
                 CompletionContent(QuestResult("r", "q", "g", "u", "Morning walk", "Me", 100000, 60000, 1000.0, "r"),
-                    onAddPhoto = { photo = true }, onDone = { memories = true })
+                    onAddPhoto = { photo = true }, onDone = { memories = true }, onViewRoute = { route = true })
             }
         }
         compose.onNodeWithText("Quest completed!").assertExists()
@@ -28,6 +29,8 @@ class CompletionScreenTest {
         compose.onNodeWithText("Time: 1:00").assertExists()
         compose.onNodeWithText("Add a photo").performClick()
         compose.onNodeWithText("View Memories").performClick()
+        compose.onNodeWithText("View route").performClick()
+        assertTrue(route)
         assertTrue(photo)
         assertTrue(memories)
     }
