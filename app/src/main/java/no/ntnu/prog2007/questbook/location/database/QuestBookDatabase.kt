@@ -17,6 +17,7 @@ import no.ntnu.prog2007.questbook.data.local.QuestEntity
  * Version 2 also stores quests, preserving existing route points.
  * Version 3 adds resumable tracking sessions and saved quest results.
  * Version 4 adds local photos linked to completion results.
+ * Version 5 records uninterrupted route sections on accepted GPS points.
  */
 @Database(
     entities = [
@@ -26,7 +27,7 @@ import no.ntnu.prog2007.questbook.data.local.QuestEntity
         QuestResultEntity::class,
         no.ntnu.prog2007.questbook.data.photo.MemoryPhotoEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = true
 )
 abstract class QuestBookDatabase : RoomDatabase() {
@@ -101,6 +102,13 @@ abstract class QuestBookDatabase : RoomDatabase() {
             }
         }
 
+        /** Adds explicit resume boundaries without deleting routes, results, sessions, or photos. */
+        val MIGRATION_4_5: Migration = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `route_points` ADD COLUMN `startsSegment` INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         /** Returns the database instance shared by the application. */
         fun getDatabase(context: Context): QuestBookDatabase {
             return INSTANCE ?: synchronized(this) {
@@ -109,7 +117,7 @@ abstract class QuestBookDatabase : RoomDatabase() {
                     QuestBookDatabase::class.java,
                     "questbook_gps_database"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .build()
                     .also { INSTANCE = it }
             }

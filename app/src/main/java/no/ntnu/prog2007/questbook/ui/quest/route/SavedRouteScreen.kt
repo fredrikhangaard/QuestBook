@@ -77,6 +77,11 @@ fun SavedRouteContent(state: SavedRouteUiState, onBack: () -> Unit, onRetry: () 
                             }
                         }
                         Text("${route.points.size} recorded GPS points", style = MaterialTheme.typography.bodySmall)
+                        val sections = remember(route.points) { routeSegmentRanges(route.points).size }
+                        if (sections > 1) {
+                            Text("$sections tracked sections", style = MaterialTheme.typography.labelLarge)
+                            Text("Movement while paused is not connected.", style = MaterialTheme.typography.bodySmall)
+                        }
                         if (route.points.size == 1) Text("Only one GPS point was saved; start and finish are at the same position.")
                         Text("Offline route preview · North is up. No street map is shown.",
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -91,6 +96,7 @@ fun SavedRouteContent(state: SavedRouteUiState, onBack: () -> Unit, onRetry: () 
 @Composable
 private fun RouteDrawing(points: List<RoutePosition>) {
     val projected = remember(points) { projectRoute(points) }
+    val sections = remember(points) { routeSegmentRanges(points) }
     val line = MaterialTheme.colorScheme.primary
     val finish = MaterialTheme.colorScheme.error
     val grid = MaterialTheme.colorScheme.outlineVariant
@@ -106,12 +112,20 @@ private fun RouteDrawing(points: List<RoutePosition>) {
             }
             val fitted = fitRoute(projected, size.width.toDouble(), size.height.toDouble(), 32.dp.toPx().toDouble())
             val offsets = fitted.map { Offset(it.x.toFloat(), it.y.toFloat()) }
-            if (offsets.size > 1) {
-                val path = Path().apply {
-                    moveTo(offsets.first().x, offsets.first().y)
-                    offsets.drop(1).forEach { lineTo(it.x, it.y) }
+            // Fit all points together, but start a separate path for every uninterrupted section.
+            // A one-point section is still visible and must not be joined to either neighbour.
+            sections.forEach { section ->
+                if (section.count() == 1) {
+                    drawCircle(line, 3.dp.toPx(), offsets[section.first])
+                } else {
+                    val path = Path().apply {
+                        moveTo(offsets[section.first].x, offsets[section.first].y)
+                        for (index in (section.first + 1)..section.last) {
+                            lineTo(offsets[index].x, offsets[index].y)
+                        }
+                    }
+                    drawPath(path, line, style = Stroke(4.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
                 }
-                drawPath(path, line, style = Stroke(4.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
             }
             offsets.firstOrNull()?.let {
                 drawCircle(surface, 11.dp.toPx(), it)

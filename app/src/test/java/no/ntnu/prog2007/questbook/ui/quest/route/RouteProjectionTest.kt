@@ -30,4 +30,13 @@ class RouteProjectionTest {
         }
         assertEquals(PreviewPosition(200.0, 150.0), fitRoute(listOf(point), 400.0, 300.0, 30.0).single())
     }
+    @Test fun explicitBreaksSplitEdgesAndKeepIsolatedPoints() {
+        val points = listOf(RoutePosition(60.0, 10.0), RoutePosition(60.1, 10.1),
+            RoutePosition(61.0, 11.0, startsSegment = true),
+            RoutePosition(62.0, 12.0, startsSegment = true), RoutePosition(62.1, 12.1))
+        assertEquals(listOf(0..1, 2..2, 3..4), routeSegmentRanges(points))
+        assertEquals(listOf(0..1), routeSegmentRanges(points.take(2))) // Legacy data is one section.
+        assertTrue(routeSegmentRanges(emptyList()).isEmpty())
+    }
+
 }
