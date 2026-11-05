@@ -38,7 +38,7 @@ import no.ntnu.prog2007.questbook.data.repository.QuestDependencies
 @Composable
 fun QuestScreen(questId: String, onAddPhotoClick: () -> Unit = {}, onBack: () -> Unit = {},
     canAccessGroup: (String) -> Boolean = { false }, group: GroupSummary? = null,
-    onMemoriesClick: () -> Unit = {}) {
+    onMemoriesClick: () -> Unit = {}, onViewRoute: () -> Unit = {}) {
     val context = LocalContext.current
     // A remembered factory must still read new group membership when Firestore delivers updates.
     val latestGroup by rememberUpdatedState(group)
@@ -91,7 +91,7 @@ fun QuestScreen(questId: String, onAddPhotoClick: () -> Unit = {}, onBack: () ->
         val savedResult = trackingUi.result
         if (savedResult != null && hasGroupAccess) {
             no.ntnu.prog2007.questbook.ui.questbook.CompletionContent(
-                savedResult, onAddPhotoClick, onMemoriesClick)
+                savedResult, onAddPhotoClick, onMemoriesClick, onViewRoute)
             return@Column
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {

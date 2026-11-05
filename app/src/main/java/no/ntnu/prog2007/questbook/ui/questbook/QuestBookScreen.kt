@@ -25,16 +25,16 @@ import java.util.Locale
 
 /** Memories replaces the sample totals with durable, account-scoped completion history. */
 @Composable
-fun QuestBookScreen(onQuestClick: (String) -> Unit = {}) {
+fun QuestBookScreen(onQuestClick: (String) -> Unit = {}, onRouteClick: ((String) -> Unit)? = null) {
     val context = LocalContext.current
     val model: MemoriesViewModel = viewModel(factory = remember { MemoriesViewModel.Factory(context) })
     val state by model.state.collectAsStateWithLifecycle()
-    MemoriesContent(state, onQuestClick)
+    MemoriesContent(state, onRouteClick = onRouteClick, onQuestClick = onQuestClick)
 }
 
 /** Stateless rendering allows previews and flow tests to use isolated data instead of real accounts. */
 @Composable
-fun MemoriesContent(state: MemoriesUiState, onQuestClick: (String) -> Unit = {}) {
+fun MemoriesContent(state: MemoriesUiState, onRouteClick: ((String) -> Unit)? = null, onQuestClick: (String) -> Unit = {}) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
@@ -68,6 +68,9 @@ fun MemoriesContent(state: MemoriesUiState, onQuestClick: (String) -> Unit = {})
                             modifier = Modifier.fillMaxWidth().height(200.dp), contentScale = ContentScale.Crop) }
                         if (photo.caption.isNotBlank()) Text(photo.caption)
                     }
+                    if (result.gpsSessionId != null && onRouteClick != null) {
+                        OutlinedButton(onClick = { onRouteClick(result.questId) }) { Text("View route") }
+                    }
                     TextButton(onClick = { onQuestClick(result.questId) }) { Text("View quest") }
                 }
             }
@@ -77,7 +80,7 @@ fun MemoriesContent(state: MemoriesUiState, onQuestClick: (String) -> Unit = {})
 
 /** Success is rendered from the committed result, so reaching the GPS target alone cannot show it. */
 @Composable
-fun CompletionContent(result: QuestResult, onAddPhoto: () -> Unit, onDone: () -> Unit) {
+fun CompletionContent(result: QuestResult, onAddPhoto: () -> Unit, onDone: () -> Unit, onViewRoute: (() -> Unit)? = null) {
     Column(Modifier.fillMaxWidth().padding(vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text("✓", style = MaterialTheme.typography.displayLarge, color = MaterialTheme.colorScheme.primary)
@@ -88,13 +91,16 @@ fun CompletionContent(result: QuestResult, onAddPhoto: () -> Unit, onDone: () ->
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) { Column(Modifier.padding(20.dp)) { ResultMetrics(result) } }
         Text("Result and route saved on this device.", style = MaterialTheme.typography.bodySmall)
         Button(onClick = onAddPhoto, modifier = Modifier.fillMaxWidth()) { Text("Add a photo") }
+        if (result.gpsSessionId != null && onViewRoute != null) {
+            OutlinedButton(onClick = onViewRoute, modifier = Modifier.fillMaxWidth()) { Text("View route") }
+        }
         OutlinedButton(onClick = onDone, modifier = Modifier.fillMaxWidth()) { Text("View Memories") }
     }
 }
 
 /** Both screens use the same units and paused-time-aware duration snapshot. */
 @Composable
-private fun ResultMetrics(result: QuestResult) {
+internal fun ResultMetrics(result: QuestResult) {
     val seconds = result.durationMillis / 1000
     Text("Time: %d:%02d".format(seconds / 60, seconds % 60))
     result.distanceMeters?.let { distance ->
