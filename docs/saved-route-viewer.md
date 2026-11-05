@@ -6,9 +6,9 @@ This is an offline, north-up route diagram, not a street map or navigation tool.
 
 ## Data and privacy
 
-`RoomSavedRouteReader` resolves the quest's completion, checks the signed-in user ID, then loads only that result's GPS session. Positions retain the DAO's timestamp/id order. Invalid coordinates are ignored. Missing results use the same unavailable message whether absent or owned by someone else. Account changes cancel pending reads and clear the old route. The existing database schema and migration chain are unchanged.
+`RoomSavedRouteReader` resolves the quest's completion, checks the signed-in user ID, then loads only that result's GPS session. Positions retain the DAO's timestamp/id order. Invalid coordinates are ignored. Missing results use the same unavailable message whether absent or owned by someone else. Account changes cancel pending reads and clear the old route. Database version 5 adds an explicit section-start flag to GPS points, preserving all earlier route, result, session, and photo data.
 
-No GPS session: the screen explains that this quest has no GPS route. A session with no available valid points shows a missing-points message while retaining completion statistics. A single point places start and finish at the same location. A failed database read offers Retry.
+No GPS session: the screen explains that this quest has no GPS route. A session with no available valid points shows a missing-points message while retaining completion statistics. A single point places start and finish at the same location. Explicit pause/resume boundaries are drawn as separate paths; a one-point section remains visible. A failed database read offers Retry.
 
 ## Validation
 
