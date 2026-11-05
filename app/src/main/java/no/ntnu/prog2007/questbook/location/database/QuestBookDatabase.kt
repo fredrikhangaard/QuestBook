@@ -16,15 +16,17 @@ import no.ntnu.prog2007.questbook.data.local.QuestEntity
  * Version 1 stored GPS route points.
  * Version 2 also stores quests, preserving existing route points.
  * Version 3 adds resumable tracking sessions and saved quest results.
+ * Version 4 adds local photos linked to completion results.
  */
 @Database(
     entities = [
         RoutePointEntity::class,
         QuestEntity::class,
         TrackingSessionEntity::class,
-        QuestResultEntity::class
+        QuestResultEntity::class,
+        no.ntnu.prog2007.questbook.data.photo.MemoryPhotoEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = true
 )
 abstract class QuestBookDatabase : RoomDatabase() {
@@ -34,6 +36,8 @@ abstract class QuestBookDatabase : RoomDatabase() {
     abstract fun questDao(): QuestDao
 
     abstract fun trackingDao(): TrackingDao
+
+    abstract fun memoryPhotoDao(): no.ntnu.prog2007.questbook.data.photo.MemoryPhotoDao
 
     companion object {
 
@@ -86,6 +90,17 @@ abstract class QuestBookDatabase : RoomDatabase() {
             }
         }
 
+        /** Adds local result-linked photos without changing existing quests, results, or routes. */
+        val MIGRATION_3_4: Migration = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""CREATE TABLE IF NOT EXISTS `memory_photos` (
+                    `id` TEXT NOT NULL, `resultId` TEXT NOT NULL, `questId` TEXT NOT NULL,
+                    `groupId` TEXT NOT NULL, `userId` TEXT NOT NULL, `caption` TEXT NOT NULL,
+                    `jpegBytes` BLOB NOT NULL, `createdAtMillis` INTEGER NOT NULL,
+                    PRIMARY KEY(`id`))""".trimIndent())
+            }
+        }
+
         /** Returns the database instance shared by the application. */
         fun getDatabase(context: Context): QuestBookDatabase {
             return INSTANCE ?: synchronized(this) {
@@ -94,7 +109,7 @@ abstract class QuestBookDatabase : RoomDatabase() {
                     QuestBookDatabase::class.java,
                     "questbook_gps_database"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                     .build()
                     .also { INSTANCE = it }
             }

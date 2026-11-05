@@ -37,7 +37,8 @@ import no.ntnu.prog2007.questbook.data.repository.QuestDependencies
 /** Quest details with foreground GPS tracking for the selected assigned distance quest. */
 @Composable
 fun QuestScreen(questId: String, onAddPhotoClick: () -> Unit = {}, onBack: () -> Unit = {},
-    canAccessGroup: (String) -> Boolean = { false }, group: GroupSummary? = null) {
+    canAccessGroup: (String) -> Boolean = { false }, group: GroupSummary? = null,
+    onMemoriesClick: () -> Unit = {}) {
     val context = LocalContext.current
     // A remembered factory must still read new group membership when Firestore delivers updates.
     val latestGroup by rememberUpdatedState(group)
@@ -85,6 +86,12 @@ fun QuestScreen(questId: String, onAddPhotoClick: () -> Unit = {}, onBack: () ->
         TextButton(onClick = onBack, contentPadding = PaddingValues(0.dp)) { Text("‹  Back") }
         if (quest == null) {
             Text("Quest not found", style = MaterialTheme.typography.titleLarge)
+            return@Column
+        }
+        val savedResult = trackingUi.result
+        if (savedResult != null && hasGroupAccess) {
+            no.ntnu.prog2007.questbook.ui.questbook.CompletionContent(
+                savedResult, onAddPhotoClick, onMemoriesClick)
             return@Column
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -189,7 +196,7 @@ fun QuestScreen(questId: String, onAddPhotoClick: () -> Unit = {}, onBack: () ->
         if (trackingUi.error != null && !trackingUi.isBusy && gps.sessionId.isBlank()) {
             TextButton(onClick = tracking::load) { Text("Retry loading tracking") }
         }
-        OutlinedButton(onClick = onAddPhotoClick, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+        if (trackingUi.result != null && hasGroupAccess) OutlinedButton(onClick = onAddPhotoClick, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
             shape = RoundedCornerShape(10.dp)) { Text("Add photo") }
         Spacer(Modifier.height(8.dp))
     }

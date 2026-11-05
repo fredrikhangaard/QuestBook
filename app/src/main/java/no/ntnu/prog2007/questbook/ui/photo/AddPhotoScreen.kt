@@ -128,13 +128,14 @@ fun AddPhotoContent(
 
         OutlinedButton(
             onClick = onChooseFromGallery,
-            enabled = !state.isProcessing,
+            enabled = !state.isProcessing && !state.isSaving && !state.isSaved,
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Choose from gallery")
         }
 
         OutlinedTextField(
+            enabled = !state.isSaving && !state.isSaved,
             value = state.caption,
             onValueChange = onCaptionChange,
             label = { Text("Add a caption (optional)") },
@@ -151,7 +152,7 @@ fun AddPhotoContent(
             enabled = state.canSave,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("Save")
+            Text(if (state.isSaving) "Saving…" else "Save to Memories")
         }
     }
 }
