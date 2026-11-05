@@ -34,6 +34,14 @@ import no.ntnu.prog2007.questbook.ui.quest.create.CreateQuestScreen
 fun QuestBookNavHost() {
 
     val navController = rememberNavController()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val personal: no.ntnu.prog2007.questbook.ui.personal.PersonalQuestsViewModel = viewModel(
+        factory = androidx.compose.runtime.remember { no.ntnu.prog2007.questbook.ui.personal.PersonalQuestsViewModel.Factory(context) })
+    val personalState by personal.state.collectAsStateWithLifecycle()
+    fun openQuest(id: String) {
+        val route = if (no.ntnu.prog2007.questbook.data.personal.PersonalQuestIds.isPersonalQuest(id)) "personal" else "quest"
+        navController.navigate("$route/${Uri.encode(id)}")
+    }
     // One source supplies matching group summaries to Home, overview, and detail pages.
     val groupsViewModel: GroupsViewModel = viewModel()
     val groups by groupsViewModel.groups.collectAsStateWithLifecycle()
@@ -55,6 +63,8 @@ fun QuestBookNavHost() {
             launchSingleTop = true
             restoreState = true
         }
+        // Restoring a tab can also restore its former detail stack. A tab tap opens its overview.
+        navController.popBackStack(route, inclusive = false)
     }
 
     Scaffold(
@@ -102,12 +112,14 @@ fun QuestBookNavHost() {
 
             composable("today") {
                 TodayScreen(
-                    onQuestClick = { questId -> navController.navigate("quest/$questId") },
+                    onQuestClick = ::openQuest,
                     onQuestBookClick = { openTab("questbook") },
                     onAllQuestsClick = { openTab("quests") },
                     groups = groups,
                     onGroupClick = { id -> navController.navigate("group/$id") },
-                    onAddGroup = { navController.navigate("addgroup") }
+                    onAddGroup = { navController.navigate("addgroup") },
+                    personalState = personalState, onPersonalQuest = ::openQuest, onRefreshPersonal = personal::refresh,
+                    onNewActivity = { navController.navigate("logactivity") }
                 )
             }
 
@@ -124,7 +136,8 @@ fun QuestBookNavHost() {
                     onMemoriesClick = { openTab("questbook") },
                     onViewRoute = { navController.navigate("savedroute/${Uri.encode(questId)}") },
                     onBack = { navController.popBackStack() },
-                    canAccessGroup = { groupId -> groupsViewModel.groups.value.any { it.id == groupId } },
+                    canAccessGroup = { groupId -> groupsViewModel.groups.value.any { it.id == groupId } ||
+                        AppServices.authRepository.currentUserId?.let { groupId == no.ntnu.prog2007.questbook.data.personal.PersonalQuestIds.group(it) } == true },
                     group = groups.find { it.id == quests.find { quest -> quest.id == questId }?.groupId }
                 )
             }
@@ -144,7 +157,7 @@ fun QuestBookNavHost() {
 
             composable("questbook") {
                 QuestBookScreen(
-                    onQuestClick = { id -> navController.navigate("quest/${Uri.encode(id)}") },
+                    onQuestClick = ::openQuest,
                     onRouteClick = { id -> navController.navigate("savedroute/${Uri.encode(id)}") })
             }
 
@@ -217,6 +230,27 @@ fun QuestBookNavHost() {
                 }
             }
 
+            composable("personal/{questId}", arguments = listOf(navArgument("questId") { type = NavType.StringType })) { backStackEntry ->
+                val id = backStackEntry.arguments?.getString("questId").orEmpty()
+                no.ntnu.prog2007.questbook.ui.personal.PersonalQuestDetail(id, personalState,
+                    onBack = { navController.popBackStack() },
+                    onTrack = { personal.track(id) { navController.navigate("quest/${Uri.encode(id)}") } },
+                    onLog = { quantity, minutes -> personal.logManual(id, quantity, minutes) },
+                    onPhoto = { navController.navigate("addphoto/${Uri.encode(id)}") },
+                    onMemories = { openTab("questbook") }, onRefresh = personal::refresh,
+                    onNewActivity = { navController.navigate("logactivity") })
+            }
+
+            composable("logactivity") {
+                no.ntnu.prog2007.questbook.ui.personal.LogPersonalActivityScreen(personalState,
+                    onBack = { navController.popBackStack() },
+                    onSave = { metric, quantity, minutes, gps -> personal.newActivity(metric, quantity, minutes, gps) { id, useGps ->
+                        navController.navigate("${if (useGps) "quest" else "personal"}/${Uri.encode(id)}") {
+                            popUpTo("logactivity") { inclusive = true }
+                        }
+                    } })
+            }
+
             composable("addgroup") {
                 AddGroupScreen(onBack = { navController.popBackStack() },
                     onCreate = { navController.navigate("creategroup") },
@@ -244,7 +278,9 @@ fun QuestBookNavHost() {
             }
             composable("quests") {
                 QuestsScreen(
-                    onQuestClick = { questId -> navController.navigate("quest/$questId") }
+                    onQuestClick = ::openQuest, personalState = personalState,
+                    onPersonalQuest = ::openQuest, onRefreshPersonal = personal::refresh,
+                    onNewActivity = { navController.navigate("logactivity") }
                 )
             }
             composable("profile") {

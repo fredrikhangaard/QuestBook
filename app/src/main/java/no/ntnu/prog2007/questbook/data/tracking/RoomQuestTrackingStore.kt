@@ -38,6 +38,14 @@ class RoomQuestTrackingStore(private val database: QuestBookDatabase) : QuestTra
             validateTrackingQuest(quest, userId)
             // Reuse the session ID on resume, rather than splitting one quest into multiple routes.
             val existing = tracking.getSession(questId)
+            if (no.ntnu.prog2007.questbook.data.personal.PersonalQuestIds.isPersonalGroup(quest.groupId)) {
+                val personal = checkNotNull(database.personalQuestDao().getAssignment(questId))
+                check(personal.userId == userId && personal.cadence != "WEEKLY")
+                // Existing GPS activities may still be saved after expiry, but cannot earn an expired daily award.
+                check(existing != null || nowMillis in personal.periodStartMillis until personal.periodEndMillis) {
+                    "This daily quest has expired."
+                }
+            }
             if (existing != null) {
                 check(existing.userId == userId) { "This session belongs to another user." }
                 return@withTransaction
