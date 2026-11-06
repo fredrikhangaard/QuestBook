@@ -7,7 +7,9 @@ import no.ntnu.prog2007.questbook.data.local.QuestEntity
 import no.ntnu.prog2007.questbook.data.personal.ActivityMetric
 import no.ntnu.prog2007.questbook.data.personal.QuestActivity
 import no.ntnu.prog2007.questbook.data.personal.questActivities
+import no.ntnu.prog2007.questbook.data.photo.MemoryPhotoEntity
 import no.ntnu.prog2007.questbook.data.tracking.QuestResultEntity
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -190,5 +192,46 @@ class ChallengeCloudTest {
         assertEquals(300L, created!!.joinedAtMillis)
         assertNull(sameTime)
         assertNull(afterRejoin)
+    }
+
+    private fun photo(bytes: ByteArray = byteArrayOf(1, 2, 3, 4), caption: String = "Top of the hill") =
+        MemoryPhotoEntity("photo-1", "session-1", "attempt-x", "g", "other", caption, bytes, 5_000L)
+
+    @Test
+    fun photoRoundTripKeepsTheImageAndLinksItToTheCompletion() {
+        // Arrange
+        val original = photo()
+        val data = ChallengeCloud.photoToMap(original)
+
+        // Act
+        val restored = ChallengeCloud.photoFromMap("photo-1", "g", data)!!
+
+        // Assert
+        assertArrayEquals(original.jpegBytes, restored.jpegBytes)
+        assertEquals("session-1", restored.resultId)
+        assertEquals("other", restored.userId)
+        assertEquals("Top of the hill", restored.caption)
+        assertTrue(data["imageBase64"] is String)
+    }
+
+    @Test
+    fun brokenOrOversizedPhotosAreSkipped() {
+        // Arrange
+        val good = ChallengeCloud.photoToMap(photo())
+        val tooBig = ByteArray(ChallengeCloud.MAX_PHOTO_BYTES + 1)
+        val broken = listOf(
+            good + ("imageBase64" to "not base64 !!"),
+            good + ("imageBase64" to ""),
+            good + ("sizeBytes" to 999L),   // does not match the image
+            good + ("caption" to "x".repeat(ChallengeCloud.MAX_CAPTION_LENGTH + 1)),
+            ChallengeCloud.photoToMap(photo(bytes = tooBig)),
+            good - "resultId"
+        )
+
+        // Act
+        val restored = broken.map { ChallengeCloud.photoFromMap("photo-1", "g", it) }
+
+        // Assert
+        assertTrue(restored.all { it == null })
     }
 }

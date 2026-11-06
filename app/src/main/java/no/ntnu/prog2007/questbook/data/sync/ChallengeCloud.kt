@@ -8,6 +8,8 @@ import no.ntnu.prog2007.questbook.data.local.QuestEntity
 import no.ntnu.prog2007.questbook.data.personal.ActivityEntryEntity
 import no.ntnu.prog2007.questbook.data.personal.ActivityMetric
 import no.ntnu.prog2007.questbook.data.personal.QuestActivity
+import no.ntnu.prog2007.questbook.data.photo.MemoryPhotoEntity
+import no.ntnu.prog2007.questbook.data.photo.PhotoCodec
 import no.ntnu.prog2007.questbook.data.tracking.QuestResultEntity
 import no.ntnu.prog2007.questbook.model.QuestStatus
 import no.ntnu.prog2007.questbook.model.QuestType
@@ -21,6 +23,7 @@ import no.ntnu.prog2007.questbook.model.QuestType
  * - `completions/{resultId}`: a finished attempt, without the GPS route.
  * - `activity/{eventId}`: one activity event (amounts and a time only), used for weekly group goals.
  * - `spells/{userId}`: when the member joined, stamped with the server's clock.
+ * - `photos/{photoId}`: an optional photo for a completion, as Base64 text.
  *
  * This file has no Firebase types, so it can be unit tested on the JVM. Every `...FromMap`
  * function returns null for a document it does not trust, so a broken document is skipped
@@ -32,12 +35,20 @@ object ChallengeCloud {
     const val COMPLETIONS = "completions"
     const val ACTIVITY = "activity"
     const val SPELLS = "spells"
+    const val PHOTOS = "photos"
 
-    /** Spells come first, so a member's join time is known before their activity is uploaded. */
-    val COLLECTIONS = listOf(SPELLS, CHALLENGES, ATTEMPTS, COMPLETIONS, ACTIVITY)
+    /**
+     * Spells come first, so a member's join time is known before their activity is uploaded.
+     * Photos come last, because the rules only accept a photo for an existing completion.
+     */
+    val COLLECTIONS = listOf(SPELLS, CHALLENGES, ATTEMPTS, COMPLETIONS, ACTIVITY, PHOTOS)
 
-    /** Only activity this new is shared and downloaded. Older weeks keep what is already in Room. */
+    /** Only activity and photos this new are shared and downloaded. Older ones stay as they are in Room. */
     const val ACTIVITY_WINDOW_MILLIS = 56L * 24 * 60 * 60 * 1000
+
+    /** Same limits as LocalMemoryPhotoStore. 675 000 bytes is about 900 000 Base64 characters. */
+    const val MAX_PHOTO_BYTES = 675_000
+    const val MAX_CAPTION_LENGTH = 200
 
     private val KINDS = setOf("OPEN", "DRAW", "WEEKLY")
     private val VISITS = setOf("WATER", "PARK", "OUTDOOR", "CONFIRMED")
@@ -204,6 +215,34 @@ object ChallengeCloud {
             visitKind = visit,
             bodyweightReps = data.count("bodyweightReps")
         )
+    }
+
+    // ---------- photos ----------
+
+    /** A photo for one of this account's completions. The JPEG is sent as Base64 text. */
+    fun photoToMap(photo: MemoryPhotoEntity): Map<String, Any?> = mapOf(
+        "resultId" to photo.resultId,
+        "questId" to photo.questId,
+        "userId" to photo.userId,
+        "caption" to photo.caption,
+        "imageBase64" to PhotoCodec.encode(photo.jpegBytes),
+        "sizeBytes" to photo.jpegBytes.size,
+        "createdAtMillis" to photo.createdAtMillis
+    )
+
+    /**
+     * Another member's photo as a local row. The document ID is the original photo ID, so the
+     * same photo is never saved twice. Broken Base64, a wrong size or a too long caption is skipped.
+     */
+    fun photoFromMap(docId: String, groupId: String, data: Map<String, Any?>): MemoryPhotoEntity? {
+        val resultId = data.text("resultId") ?: return null
+        val questId = data.text("questId") ?: return null
+        val userId = data.text("userId") ?: return null
+        val caption = data.text("caption")?.takeIf { it.length <= MAX_CAPTION_LENGTH } ?: return null
+        val createdAt = data.long("createdAtMillis") ?: return null
+        val jpeg = data.text("imageBase64")?.let(PhotoCodec::decode) ?: return null
+        if (jpeg.isEmpty() || jpeg.size > MAX_PHOTO_BYTES || data.long("sizeBytes") != jpeg.size.toLong()) return null
+        return MemoryPhotoEntity(docId, resultId, questId, groupId, userId, caption, jpeg, createdAt)
     }
 
     // ---------- membership spells ----------

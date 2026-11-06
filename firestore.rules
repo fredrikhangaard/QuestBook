@@ -199,6 +199,25 @@ service cloud.firestore {
             || request.resource.data.visit in ['WATER', 'PARK', 'OUTDOOR', 'CONFIRMED']);
       }
 
+      // An optional photo for one of the member's own completions, as Base64 text.
+      // 900 000 characters is about 675 000 bytes, so the document stays under Firestore's 1 MiB limit.
+      match /photos/{photoId} {
+        allow read: if isGroupMember(groupId);
+        allow create: if isGroupMember(groupId)
+          && request.resource.data.keys().hasOnly(['resultId', 'questId', 'userId', 'caption',
+              'imageBase64', 'sizeBytes', 'createdAtMillis'])
+          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.caption is string && request.resource.data.caption.size() <= 200
+          && request.resource.data.imageBase64 is string
+          && request.resource.data.imageBase64.size() > 0 && request.resource.data.imageBase64.size() <= 900000
+          && request.resource.data.sizeBytes is int
+          && request.resource.data.sizeBytes > 0 && request.resource.data.sizeBytes <= 675000
+          && request.resource.data.createdAtMillis is int
+          && request.resource.data.createdAtMillis <= nowMillis() + 600000
+          && getAfter(/databases/$(database)/documents/groups/$(groupId)/completions/$(request.resource.data.resultId)).data.userId == request.auth.uid
+          && getAfter(/databases/$(database)/documents/groups/$(groupId)/completions/$(request.resource.data.resultId)).data.questId == request.resource.data.questId;
+      }
+
       // When a member joined, stamped with the server's clock so nobody can backdate it.
       match /spells/{userId} {
         allow read: if isGroupMember(groupId);

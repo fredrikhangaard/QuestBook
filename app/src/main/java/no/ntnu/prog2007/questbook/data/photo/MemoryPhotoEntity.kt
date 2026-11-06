@@ -20,7 +20,7 @@ data class MemoryPhotoEntity(
     val createdAtMillis: Long
 )
 
-/** Photos stay local until a separate cloud synchronization implementation is available. */
+/** Personal photos stay local. Photos for group quest completions are shared by FirestoreChallengeSync. */
 @Dao
 interface MemoryPhotoDao {
     @Insert suspend fun insert(photo: MemoryPhotoEntity)

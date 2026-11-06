@@ -3,7 +3,7 @@ package no.ntnu.prog2007.questbook.data.photo
 import no.ntnu.prog2007.questbook.location.database.QuestBookDatabase
 import java.util.UUID
 
-/** Enforces the result/owner link before writing local photos. Never uploads to Firestore. */
+/** Enforces the result/owner link before writing local photos. Group quest photos are uploaded later by FirestoreChallengeSync. */
 class LocalMemoryPhotoStore(
     private val db: QuestBookDatabase,
     private val currentUserId: () -> String?
