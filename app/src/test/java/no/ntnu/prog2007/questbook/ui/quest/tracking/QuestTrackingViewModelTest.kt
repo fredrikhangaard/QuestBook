@@ -40,14 +40,16 @@ class QuestTrackingViewModelTest {
         }
     }
     private suspend fun setup(assignee: String? = "me", type: QuestType = QuestType.DISTANCE,
-        access: Boolean = true): Triple<QuestTrackingViewModel, Source, Pair<GpsRepository, Store>> {
+        access: Boolean = true, currentUser: () -> String? = { "me" },
+        background: Boolean = false): Triple<QuestTrackingViewModel, Source, Pair<GpsRepository, Store>> {
         val quests = FakeQuestRepository()
         quests.addQuest(Quest("gps", "group", type, "Walk", "Walk outside", "Me", QuestStatus.NOT_STARTED,
             requiredDistanceKm = 0.005, assignedUserId = assignee))
         val source = Source()
         val store = Store()
         val gps = GpsRepository(source, {}, Dispatchers.Unconfined, persistCheckpoint = store::checkpoint)
-        val vm = QuestTrackingViewModel("gps", quests, store, gps, { "me" }, { access })
+        val vm = QuestTrackingViewModel("gps", quests, store, gps, currentUser, { access },
+            keepTrackingInBackground = background)
         return Triple(vm, source, gps to store)
     }
 
@@ -112,6 +114,35 @@ class QuestTrackingViewModelTest {
             vm.screenStarted()
             vm.start()
             assertEquals(1, source.starts)
+        } finally { dependencies.first.close() }
+    }
+
+    @Test fun serviceOwnedWalkContinuesWhenScreenStopsButPauseStillWorks() = runBlocking {
+        val (vm, source, dependencies) = setup(background = true)
+        try {
+            vm.start()
+            vm.screenStopped()
+            assertTrue(vm.gpsState.value.isTracking)
+            source.point(RoutePoint(0.0, 0.0, 1000, 5f), true)
+            assertEquals(1, vm.gpsState.value.pointCount)
+            vm.pause()
+            source.point(RoutePoint(0.00005, 0.0, 4000, 5f), true)
+            assertFalse(vm.gpsState.value.isTracking)
+            assertEquals(1, vm.gpsState.value.pointCount)
+        } finally { dependencies.first.close() }
+    }
+
+    @Test fun accountChangeDuringRoomWriteCannotStartPreviousUsersGps() = runBlocking {
+        var user: String? = "me"
+        val (vm, source, dependencies) = setup(currentUser = { user }, background = true)
+        try {
+            dependencies.second.gate = CompletableDeferred()
+            vm.start()
+            user = "another-account"
+            dependencies.second.gate!!.complete(Unit)
+            assertEquals(0, source.starts)
+            assertFalse(vm.gpsState.value.isTracking)
+            assertNotNull(vm.uiState.value.error)
         } finally { dependencies.first.close() }
     }
 }
