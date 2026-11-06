@@ -32,7 +32,10 @@ class QuestTrackingViewModel(
     private val canAccessGroup: (String) -> Boolean,
     private val nowMillis: () -> Long = System::currentTimeMillis,
     private val releaseGps: () -> Unit = { gps.close() },
-    private val completedGps: () -> Unit = {}
+    private val completedGps: () -> Unit = {},
+    // Production delegates lifetime to the notification service; unit tests can use the engine directly.
+    private val startGps: () -> Unit = { gps.resumeTracking() },
+    private val keepTrackingInBackground: Boolean = false
 ) : ViewModel() {
     private val mutableState = MutableStateFlow(QuestTrackingUiState())
     val uiState = mutableState.asStateFlow()
@@ -78,9 +81,11 @@ class QuestTrackingViewModel(
                 validateTrackingQuest(quest, user)
                 // begin() persists IN_PROGRESS and the session before requesting location updates.
                 val snapshot = store.begin(questId, user, nowMillis())
+                // Authentication can change while Room is suspended. Never start the previous user's GPS.
+                check(currentUserId() == user && canAccessGroup(quest.groupId)) { "Your account or group changed. Open the quest again." }
                 if (gpsState.value.sessionId.isBlank()) gps.restore(snapshot)
                 // Navigation or app backgrounding during a Room write must not start GPS later.
-                if (foreground) gps.resumeTracking()
+                if (foreground) startGps()
             } catch (error: CancellationException) { throw error }
             catch (error: Exception) { mutableState.update { it.copy(error = error.message ?: "Could not start tracking.") } }
             finally { mutableState.update { it.copy(isBusy = false) } }
@@ -93,8 +98,8 @@ class QuestTrackingViewModel(
     fun pause() = gps.stopTracking()
     /** Returning to the page makes Start/Resume possible; it does not resume automatically. */
     fun screenStarted() { foreground = true }
-    /** Pauses when the page is left, the app backgrounds, or the device is locked. */
-    fun screenStopped() { foreground = false; pause() }
+    /** Never start a pending request after leaving the page. A running service may continue the walk. */
+    fun screenStopped() { foreground = false; if (!keepTrackingInBackground) pause() }
 
     /** Stops location updates, drains/retries writes, then saves the result and COMPLETED state together. */
     fun finish() {
@@ -128,8 +133,12 @@ class QuestTrackingViewModel(
         }
     }
 
-    /** Always stop the provider; the factory decides whether a paused writer must be retained. */
-    override fun onCleared() { foreground = false; gps.stopTracking(); releaseGps() }
+    /** Screen disposal releases its handle; a service-owned walk and its writer may remain active. */
+    override fun onCleared() {
+        foreground = false
+        if (!keepTrackingInBackground) gps.stopTracking()
+        releaseGps()
+    }
 
     /** Uses the existing Room database and Fused Location provider; no Activity is retained. */
     class Factory(context: Context, private val questId: String, private val canAccessGroup: (String) -> Boolean) : ViewModelProvider.Factory {
@@ -139,7 +148,8 @@ class QuestTrackingViewModel(
             val database = QuestBookDatabase.getDatabase(app)
             val store = RoomQuestTrackingStore(database)
             // Scope retained controllers to both user and quest, keeping account sessions separate.
-            val key = "${AppServices.authRepository.currentUserId}:$questId"
+            val userId = AppServices.authRepository.currentUserId.orEmpty()
+            val key = "$userId:$questId"
             val gps = TrackingRuntime.controllers.getOrPut(key) {
                 GpsRepository(AndroidGpsSource(app), database.routePointDao()::insertPoint,
                     persistCheckpoint = store::checkpoint)
@@ -157,12 +167,14 @@ class QuestTrackingViewModel(
                     // The result is durable and all writes drained, so this controller is no longer needed.
                     TrackingRuntime.controllers.remove(key)
                     gps.close()
-                }) as T
+                }, startGps = {
+                    QuestTrackingService.start(app, key, questId, userId, gps)
+                }, keepTrackingInBackground = true) as T
         }
     }
 }
 
-/** Paused sessions retain one serialized writer until completion or application restart. */
+/** Active and paused sessions retain one serialized writer until completion or application restart. */
 private object TrackingRuntime {
     val controllers = mutableMapOf<String, GpsRepository>()
 }

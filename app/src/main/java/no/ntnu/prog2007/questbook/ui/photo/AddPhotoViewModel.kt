@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -35,26 +36,31 @@ class AddPhotoViewModel(
 
     /** Current state of the screen. */
     val uiState: StateFlow<AddPhotoUiState> = _uiState.asStateFlow()
+    private var photoLoad: Job? = null
+    private var selection = 0
 
     /**
      * Called with the image the user picked in the photo picker,
      * or `null` if the user closed the picker without choosing one.
      */
     fun onPhotoPicked(uri: Uri?) {
-        if (uri == null) return
-        _uiState.update { it.copy(isProcessing = true, errorMessage = null) }
-        viewModelScope.launch {
+        if (uri == null || uiState.value.isSaving || uiState.value.isSaved) return
+        // Photo reads can finish out of order. Only the latest selection may replace the preview.
+        val token = ++selection
+        photoLoad?.cancel()
+        _uiState.update { it.copy(photo = null, isProcessing = true, errorMessage = null) }
+        photoLoad = viewModelScope.launch {
             try {
                 val jpeg = compressPhoto(uri)
-                _uiState.update { it.copy(photo = PreparedPhoto(jpeg), isProcessing = false) }
+                if (selection == token) _uiState.update { it.copy(photo = PreparedPhoto(jpeg), isProcessing = false) }
             } catch (error: CancellationException) {
                 throw error
             } catch (_: PhotoTooLargeException) {
-                _uiState.update {
+                if (selection == token) _uiState.update {
                     it.copy(isProcessing = false, errorMessage = "The photo is too large. Try another one.")
                 }
             } catch (_: Exception) {
-                _uiState.update {
+                if (selection == token) _uiState.update {
                     it.copy(isProcessing = false, errorMessage = "Could not read the photo.")
                 }
             }
@@ -63,6 +69,8 @@ class AddPhotoViewModel(
 
     /** Called when the user edits the caption. Long captions are cut at [MAX_CAPTION_LENGTH]. */
     fun onCaptionChange(caption: String) {
+        // Keep the displayed caption consistent with the immutable snapshot currently being saved.
+        if (uiState.value.isSaving || uiState.value.isSaved) return
         _uiState.update { it.copy(caption = caption.take(MAX_CAPTION_LENGTH)) }
     }
 

@@ -129,13 +129,13 @@ class GpsRepository(
             source.start({ point, accuracy ->
                 if (token == generation && state.value.isTracking) receive(point, accuracy)
             }, { if (token == generation) locationFailed() })
-        } catch (_: SecurityException) {
+        } catch (_: Exception) {
             locationFailed()
         }
     }
 
     /**
-     * Called by the screen timer while tracking. Every five active seconds a checkpoint is
+     * Called by the owner timer (quest service or standalone test screen). Every five active seconds a checkpoint is
      * queued even if GPS accuracy is too poor to accept a position. All writes use the same worker.
      */
     fun tick() {
@@ -159,8 +159,13 @@ class GpsRepository(
 
     /** A failed location request leaves the saved session available for a later retry. */
     private fun locationFailed() {
+        pauseWithReason("Could not start GPS. Check precise location permission and device location settings.")
+    }
+
+    /** Service/account/settings interruptions keep the route and explain why a manual resume is needed. */
+    fun pauseWithReason(reason: String) {
         stopTracking()
-        mutableState.update { it.copy(status = "Could not start GPS. Check precise location permission and device location settings.") }
+        mutableState.update { it.copy(status = reason) }
     }
 
     /** Permission denial changes feedback only; it never creates a session or starts location. */

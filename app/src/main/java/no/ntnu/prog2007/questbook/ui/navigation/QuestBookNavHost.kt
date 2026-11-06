@@ -31,7 +31,7 @@ import android.net.Uri
 import no.ntnu.prog2007.questbook.ui.quest.create.CreateQuestScreen
 
 @Composable
-fun QuestBookNavHost() {
+fun QuestBookNavHost(trackingRequest: Pair<String, String>? = null, onTrackingOpened: () -> Unit = {}) {
 
     val navController = rememberNavController()
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -49,6 +49,18 @@ fun QuestBookNavHost() {
     val quests by no.ntnu.prog2007.questbook.data.repository.QuestDependencies.questRepository.quests.collectAsStateWithLifecycle()
     val entry by navController.currentBackStackEntryAsState()
     val currentRoute = entry?.destination?.route
+    val signedInUser by AppServices.authRepository.currentUserIdFlow.collectAsStateWithLifecycle(
+        initialValue = AppServices.authRepository.currentUserId)
+    androidx.compose.runtime.LaunchedEffect(trackingRequest, signedInUser, quests) {
+        trackingRequest?.let { (user, id) ->
+            // An old notification is never a shortcut into a different account's route.
+            if (user != signedInUser) onTrackingOpened()
+            else if (quests.any { it.id == id }) {
+                navController.navigate("quest/${Uri.encode(id)}") { launchSingleTop = true }
+                onTrackingOpened()
+            }
+        }
+    }
 
     // Skip the welcome screen when Firebase remembers a signed-in user from last time.
     // Saved, so the start screen stays the same when the activity is recreated.

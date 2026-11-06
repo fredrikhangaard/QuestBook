@@ -45,7 +45,7 @@ fun ProfileScreen(
         if (state.isSignedOut) onSignedOut()
     }
 
-    ProfileContent(state = state, onSignOut = viewModel::onSignOut)
+    ProfileContent(state = state, onSignOut = viewModel::onSignOut, onRetry = viewModel::load)
 }
 
 /** Layout of the Profile screen, without a ViewModel, so it can be previewed and tested. */
@@ -53,7 +53,8 @@ fun ProfileScreen(
 fun ProfileContent(
     state: ProfileUiState,
     onSignOut: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onRetry: () -> Unit = {}
 ) {
     val user = state.user
 
@@ -88,6 +89,7 @@ fun ProfileContent(
                 Column {
                     when {
                         state.isLoading -> Text("Loading...")
+                        state.error != null -> Text(state.error, color = MaterialTheme.colorScheme.error)
                         user != null -> {
                             Text(user.username, style = MaterialTheme.typography.titleMedium)
                             Text(
@@ -100,6 +102,10 @@ fun ProfileContent(
                     }
                 }
             }
+        }
+
+        if (state.error != null) {
+            OutlinedButton(onClick = onRetry, modifier = Modifier.fillMaxWidth()) { Text("Retry loading profile") }
         }
 
         OutlinedButton(

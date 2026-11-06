@@ -22,7 +22,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
-import kotlinx.coroutines.delay
 import java.util.Locale
 import no.ntnu.prog2007.questbook.data.AppServices
 import no.ntnu.prog2007.questbook.model.QuestType
@@ -34,7 +33,7 @@ import no.ntnu.prog2007.questbook.model.QuestStatus
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import no.ntnu.prog2007.questbook.data.repository.QuestDependencies
 
-/** Quest details with foreground GPS tracking for the selected assigned distance quest. */
+/** Quest details share one GPS session with the ongoing-notification service. */
 @Composable
 fun QuestScreen(questId: String, onAddPhotoClick: () -> Unit = {}, onBack: () -> Unit = {},
     canAccessGroup: (String) -> Boolean = { false }, group: GroupSummary? = null,
@@ -51,12 +50,20 @@ fun QuestScreen(questId: String, onAddPhotoClick: () -> Unit = {}, onBack: () ->
     val trackingUi by tracking.uiState.collectAsStateWithLifecycle()
     val gps by tracking.gpsState.collectAsStateWithLifecycle()
     val owner = LocalLifecycleOwner.current
+    // Notification permission is optional: denial does not remove the user's location permission.
+    val notifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { tracking.start() }
+    fun startWithNotification() {
+        if (android.os.Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context,
+                Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+            notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        else tracking.start()
+    }
     // Approximate/coarse permission is insufficient for distance quests; require fine location.
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
-        if (granted[Manifest.permission.ACCESS_FINE_LOCATION] == true) tracking.start()
+        if (granted[Manifest.permission.ACCESS_FINE_LOCATION] == true) startWithNotification()
         else tracking.permissionDenied()
     }
-    // Tracking is deliberately foreground-only; leaving the page pauses and checkpoints it.
+    // A pending start is cancelled when the page stops, but an already running service continues.
     DisposableEffect(owner, tracking) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_START) tracking.screenStarted()
@@ -67,10 +74,7 @@ fun QuestScreen(questId: String, onAddPhotoClick: () -> Unit = {}, onBack: () ->
         owner.lifecycle.addObserver(observer)
         onDispose { owner.lifecycle.removeObserver(observer); tracking.screenStopped() }
     }
-    // This timer only refreshes active duration. Location callbacks measure actual movement.
-    LaunchedEffect(gps.isTracking) {
-        while (gps.isTracking) { delay(1000); tracking.tick() }
-    }
+    // The service owns elapsed-time updates, including when this screen is no longer composed.
     val quests by QuestDependencies.questRepository.quests
         .collectAsStateWithLifecycle()
 
@@ -172,14 +176,28 @@ fun QuestScreen(questId: String, onAddPhotoClick: () -> Unit = {}, onBack: () ->
             Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Done") }
         } else if (quest.status != QuestStatus.COMPLETED && isDistance) {
             Text(gps.status, style = MaterialTheme.typography.bodyMedium)
-            Text("Tracking pauses when you leave this screen.", style = MaterialTheme.typography.bodySmall)
+            Text("Tracking continues while your phone is locked or you use another screen. Pause here or from the GPS notification.", style = MaterialTheme.typography.bodySmall)
+            if (android.os.Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context,
+                    Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                Text("Notifications are off. Return to this quest to pause tracking.", style = MaterialTheme.typography.bodySmall)
+            }
+            if (!gps.isTracking) {
+                // Permission dialogs may stop appearing after repeated denial. Provide a direct way back to settings.
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { context.startActivity(android.content.Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS)) }) {
+                        Text("Location settings")
+                    }
+                    TextButton(onClick = { context.startActivity(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        android.net.Uri.fromParts("package", context.packageName, null))) }) { Text("App permissions") }
+                }
+            }
             if (!assignedToMe) Text("This quest must be assigned to you before tracking.")
             if (gps.isTracking) {
                 OutlinedButton(onClick = tracking::pause, modifier = Modifier.fillMaxWidth()) { Text("Pause tracking") }
             } else if (!gps.distanceCompleted) {
                 Button(onClick = {
                     if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED)
-                        tracking.start()
+                        startWithNotification()
                     else permission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
                 }, enabled = assignedToMe && hasGroupAccess && !trackingUi.isLoading && !trackingUi.isBusy && !assignmentUi.isSaving && !assignmentUi.isOpen,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(10.dp)) {
