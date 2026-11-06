@@ -4,6 +4,9 @@ import no.ntnu.prog2007.questbook.data.auth.AuthRepository
 import no.ntnu.prog2007.questbook.data.auth.FirebaseAuthRepository
 import no.ntnu.prog2007.questbook.data.groups.FirestoreGroupRepository
 import no.ntnu.prog2007.questbook.data.groups.GroupRepository
+import no.ntnu.prog2007.questbook.data.sync.ChallengeSync
+import no.ntnu.prog2007.questbook.data.sync.FirestoreChallengeSync
+import no.ntnu.prog2007.questbook.location.database.QuestBookDatabase
 
 /**
  * Holds the repository instances shared by the whole app (simple manual dependency injection).
@@ -30,9 +33,16 @@ object AppServices {
             groups = value
         }
 
+    /**
+     * Creates the group quest sync for a database. Firestore is not opened until this is called.
+     * Tests that must stay offline can set this to `{ ChallengeSync.None }`.
+     */
+    var challengeSyncFactory: (QuestBookDatabase) -> ChallengeSync = { FirestoreChallengeSync(it) }
+
     /** Goes back to the real implementations. Used by tests to clean up after themselves. */
     fun reset() {
         auth = null
         groups = null
+        challengeSyncFactory = { FirestoreChallengeSync(it) }
     }
 }
