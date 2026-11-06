@@ -23,7 +23,8 @@ class CreateQuestViewModel(
         QuestDependencies.questRepository,
     private val currentUserId: () -> String? = {
         AppServices.authRepository.currentUserId
-    }
+    },
+    private val saveShared: (suspend (Quest, Double) -> Unit)? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CreateQuestUiState())
@@ -77,10 +78,11 @@ class CreateQuestViewModel(
 
         val distanceError =
             if (
-                state.type == QuestType.DISTANCE &&
-                (distance == null || !distance.isFinite() || distance <= 0.0)
+                state.type in listOf(QuestType.DISTANCE, QuestType.WORKOUT) &&
+                (distance == null || !distance.isFinite() || distance <= 0.0 ||
+                    (state.type == QuestType.WORKOUT && distance % 1.0 != 0.0))
             ) {
-                "Enter a distance greater than 0 km."
+                "Enter a positive target (whole repetitions for workouts)."
             } else {
                 null
             }
@@ -133,7 +135,9 @@ class CreateQuestViewModel(
 
         viewModelScope.launch {
             try {
-                repository.addQuest(quest)
+                val target = when(state.type) { QuestType.DISTANCE -> distance!! * 1000
+                    QuestType.WORKOUT -> distance!!; else -> 1.0 }
+                if (saveShared != null) saveShared.invoke(quest, target) else repository.addQuest(quest)
                 _uiState.update {
                     it.copy(
                         isSaving = false,
@@ -156,7 +160,8 @@ class CreateQuestViewModel(
 
     /** Supplies the selected group ID to the ViewModel. */
     class Factory(
-        private val groupId: String
+        private val groupId: String,
+        private val saveShared: (suspend (Quest, Double) -> Unit)? = null
     ) : ViewModelProvider.Factory {
 
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -165,7 +170,7 @@ class CreateQuestViewModel(
             )
 
             @Suppress("UNCHECKED_CAST")
-            return CreateQuestViewModel(groupId) as T
+            return CreateQuestViewModel(groupId, saveShared = saveShared) as T
         }
     }
 }

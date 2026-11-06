@@ -19,6 +19,7 @@ import no.ntnu.prog2007.questbook.data.local.QuestEntity
  * Version 4 adds local photos linked to completion results.
  * Version 5 records uninterrupted route sections on accepted GPS points.
  * Version 6 adds solo daily/weekly assignments and manual activity entries.
+ * Version 7 separates group definitions/member attempts and generic bodyweight repetitions.
  */
 @Database(
     entities = [
@@ -28,9 +29,12 @@ import no.ntnu.prog2007.questbook.data.local.QuestEntity
         QuestResultEntity::class,
         no.ntnu.prog2007.questbook.data.photo.MemoryPhotoEntity::class,
         no.ntnu.prog2007.questbook.data.personal.PersonalQuestEntity::class,
-        no.ntnu.prog2007.questbook.data.personal.ActivityEntryEntity::class
+        no.ntnu.prog2007.questbook.data.personal.ActivityEntryEntity::class,
+        no.ntnu.prog2007.questbook.data.challenges.GroupChallengeEntity::class,
+        no.ntnu.prog2007.questbook.data.challenges.QuestAttemptEntity::class,
+        no.ntnu.prog2007.questbook.data.challenges.GroupMembershipSpell::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = true
 )
 abstract class QuestBookDatabase : RoomDatabase() {
@@ -44,6 +48,8 @@ abstract class QuestBookDatabase : RoomDatabase() {
     abstract fun memoryPhotoDao(): no.ntnu.prog2007.questbook.data.photo.MemoryPhotoDao
 
     abstract fun personalQuestDao(): no.ntnu.prog2007.questbook.data.personal.PersonalQuestDao
+
+    abstract fun groupChallengeDao(): no.ntnu.prog2007.questbook.data.challenges.GroupChallengeDao
 
     companion object {
 
@@ -131,6 +137,31 @@ abstract class QuestBookDatabase : RoomDatabase() {
             }
         }
 
+        /** Separate shared definitions from owned attempts; preserve all earlier routes/results/photos. */
+        val MIGRATION_6_7: Migration = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `activity_entries` ADD COLUMN `bodyweightReps` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("""CREATE TABLE IF NOT EXISTS `group_challenges` (
+                    `questId` TEXT NOT NULL, `groupId` TEXT NOT NULL, `kind` TEXT NOT NULL,
+                    `metric` TEXT NOT NULL, `target` REAL NOT NULL, `periodKey` TEXT NOT NULL,
+                    `startMillis` INTEGER NOT NULL, `endMillis` INTEGER NOT NULL, `zoneId` TEXT NOT NULL,
+                    `memberCount` INTEGER NOT NULL, `templateId` TEXT NOT NULL, `assigneeId` TEXT,
+                    PRIMARY KEY(`questId`))""")
+                db.execSQL("""CREATE TABLE IF NOT EXISTS `quest_attempts` (
+                    `attemptId` TEXT NOT NULL, `challengeId` TEXT NOT NULL, `userId` TEXT NOT NULL,
+                    PRIMARY KEY(`attemptId`))""")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_quest_attempts_challengeId_userId` ON `quest_attempts` (`challengeId`, `userId`)")
+                db.execSQL("""CREATE TABLE IF NOT EXISTS `group_membership_spells` (
+                    `id` TEXT NOT NULL, `groupId` TEXT NOT NULL, `userId` TEXT NOT NULL,
+                    `joinedAtMillis` INTEGER NOT NULL, `leftAtMillis` INTEGER, PRIMARY KEY(`id`))""")
+                // Retire time quests without deleting their history. A fresh daily can fill the freed slot.
+                db.execSQL("UPDATE personal_quests SET cadence = 'RETIRED', slot = questId WHERE metric = 'ACTIVE_MINUTES'")
+                // Current legacy walking templates must not advertise the removed manual-distance input.
+                db.execSQL("UPDATE personal_quests SET description = 'Use GPS to record this walk. Photos are optional.' WHERE templateId IN ('walk-2', 'walk-3', 'walk-5')")
+                db.execSQL("UPDATE quests SET description = 'Use GPS to record this walk. Photos are optional.' WHERE id IN (SELECT questId FROM personal_quests WHERE templateId IN ('walk-2', 'walk-3', 'walk-5'))")
+            }
+        }
+
         /** Returns the database instance shared by the application. */
         fun getDatabase(context: Context): QuestBookDatabase {
             return INSTANCE ?: synchronized(this) {
@@ -139,7 +170,7 @@ abstract class QuestBookDatabase : RoomDatabase() {
                     QuestBookDatabase::class.java,
                     "questbook_gps_database"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                     .build()
                     .also { INSTANCE = it }
             }

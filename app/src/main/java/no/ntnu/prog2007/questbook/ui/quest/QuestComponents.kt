@@ -73,7 +73,7 @@ internal fun QuestCard(quest: Quest, onClick: () -> Unit) {
                 Text(quest.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 Text(quest.requiredDistanceKm?.let { "Target: $it km" } ?: quest.status.displayName(),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(if (quest.assignedTo.isBlank()) "Unassigned" else "Assigned to ${quest.assignedTo}",
+                Text(if (quest.assignedTo == "Everyone") "Open to every member" else if (quest.assignedTo.isBlank()) "Unassigned" else "Assigned to ${quest.assignedTo}",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 // Quest rows do not fabricate tracked distance before completion.
                 LinearProgressIndicator(

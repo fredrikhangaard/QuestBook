@@ -26,9 +26,11 @@ fun TodayScreen(
     onGroupClick: (String) -> Unit = {},
     onAddGroup: () -> Unit = {},
     personalState: no.ntnu.prog2007.questbook.ui.personal.PersonalQuestsUiState? = null,
-    onPersonalQuest: (String) -> Unit = {}, onRefreshPersonal: () -> Unit = {}, onNewActivity: () -> Unit = {}
+    onPersonalQuest: (String) -> Unit = {}, onRefreshPersonal: () -> Unit = {},
+    challengeState: no.ntnu.prog2007.questbook.ui.challenges.GroupChallengesUiState? = null
 ) {
     val uiState by todayViewModel.uiState.collectAsState()
+    val cards = challengeState?.let { no.ntnu.prog2007.questbook.data.challenges.groupQuestCards(uiState.quests, it.snapshot, it.userId, it.groups.map { g -> g.id }.toSet()) } ?: uiState.quests
     LazyColumn(
         modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -42,7 +44,7 @@ fun TodayScreen(
             }
         }
         if (personalState != null) item {
-            no.ntnu.prog2007.questbook.ui.personal.PersonalQuestSection(personalState, onPersonalQuest, onRefreshPersonal, onNewActivity)
+            no.ntnu.prog2007.questbook.ui.personal.PersonalQuestSection(personalState, onPersonalQuest, onRefreshPersonal)
             HorizontalDivider(Modifier.padding(top = 16.dp))
         }
         item {
@@ -53,17 +55,17 @@ fun TodayScreen(
             }
         }
         // Cards retain the existing quest-detail navigation callbacks.
-        if (uiState.quests.isEmpty()) item { Text("No group quests yet.") }
-        items(uiState.quests.filter { it.status != QuestStatus.COMPLETED }, key = { it.id }) { quest ->
+        if (cards.isEmpty()) item { Text("No group quests yet.") }
+        items(cards.filter { it.status != QuestStatus.COMPLETED }, key = { it.id }) { quest ->
             QuestCard(quest) { onQuestClick(quest.id) }
         }
         // Completed samples remain accessible without appearing under Active quests.
-        if (uiState.quests.any { it.status == QuestStatus.COMPLETED }) {
+        if (cards.any { it.status == QuestStatus.COMPLETED }) {
             item {
                 Text("Completed quests", modifier = Modifier.padding(top = 16.dp),
                     style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
             }
-            items(uiState.quests.filter { it.status == QuestStatus.COMPLETED }, key = { it.id }) { quest ->
+            items(cards.filter { it.status == QuestStatus.COMPLETED }, key = { it.id }) { quest ->
                 QuestCard(quest) { onQuestClick(quest.id) }
             }
         }

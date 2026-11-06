@@ -18,48 +18,44 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 @Composable
 fun QuestsScreen(onQuestClick: (String) -> Unit, questsViewModel: QuestsViewModel = viewModel(),
     personalState: no.ntnu.prog2007.questbook.ui.personal.PersonalQuestsUiState? = null,
-    onPersonalQuest: (String) -> Unit = {}, onRefreshPersonal: () -> Unit = {}, onNewActivity: () -> Unit = {}) {
+    onPersonalQuest: (String) -> Unit = {}, onRefreshPersonal: () -> Unit = {},
+    challengeState: no.ntnu.prog2007.questbook.ui.challenges.GroupChallengesUiState? = null) {
     val quests by questsViewModel.quests.collectAsStateWithLifecycle()
-    QuestList(quests, onQuestClick, personalState, onPersonalQuest, onRefreshPersonal, onNewActivity)
+    val cards = challengeState?.let { groupState ->
+        no.ntnu.prog2007.questbook.data.challenges.groupQuestCards(quests, groupState.snapshot, groupState.userId, groupState.groups.map { it.id }.toSet())
+            .filterNot { parent -> parent.status == QuestStatus.COMPLETED && groupState.snapshot.attempts.any { attempt ->
+                attempt.challengeId == parent.id && attempt.userId == groupState.userId && personalState?.quests?.any { it.assignment.questId == attempt.attemptId && it.complete } == true
+            } }
+    } ?: quests
+    QuestList(cards, onQuestClick, personalState, onPersonalQuest, onRefreshPersonal)
 }
 
-/** Scrollable quest rows; filter selection survives tab switches and recreation. */
+/** Scrollable quest rows; completed history is rendered separately from active quests. */
 @Composable
 internal fun QuestList(quests: List<Quest>, onQuestClick: (String) -> Unit,
     personalState: no.ntnu.prog2007.questbook.ui.personal.PersonalQuestsUiState? = null,
-    onPersonalQuest: (String) -> Unit = {}, onRefreshPersonal: () -> Unit = {}, onNewActivity: () -> Unit = {}) {
-    var selectedFilter by rememberSaveable { mutableStateOf("All") }
-    val visible = quests.filter {
-        when (selectedFilter) {
-            "Active" -> it.status != QuestStatus.COMPLETED
-            "Completed" -> it.status == QuestStatus.COMPLETED
-            else -> true
-        }
-    }
+    onPersonalQuest: (String) -> Unit = {}, onRefreshPersonal: () -> Unit = {}) {
+    val visible = quests.filter { it.status != QuestStatus.COMPLETED }
     LazyColumn(
         modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         if (personalState != null) item {
-            no.ntnu.prog2007.questbook.ui.personal.PersonalQuestSection(personalState, onPersonalQuest, onRefreshPersonal, onNewActivity)
+            no.ntnu.prog2007.questbook.ui.personal.PersonalQuestSection(personalState, onPersonalQuest, onRefreshPersonal)
         }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Quests", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                Text("Group quests", style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                // FlowRow keeps controls usable with large accessibility fonts.
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("All", "Active", "Completed").forEach { filter ->
-                        FilterChip(selected = selectedFilter == filter, onClick = { selectedFilter = filter },
-                            label = { Text(filter) })
-                    }
-                }
+                if (visible.isNotEmpty()) Text("Group quests", style = MaterialTheme.typography.titleLarge)
             }
         }
-        if (visible.isEmpty()) item {
-            Text("No quests here yet.", modifier = Modifier.padding(vertical = 24.dp))
-        }
         items(visible, key = { it.id }) { quest -> QuestCard(quest) { onQuestClick(quest.id) } }
+        item { Text("Completed quests", style = MaterialTheme.typography.titleLarge) }
+        val completed = personalState?.quests.orEmpty().filter { it.complete && it.hasResult }
+            .sortedByDescending { it.assignment.completedAtMillis }
+        if (completed.isEmpty() && quests.none { it.status == QuestStatus.COMPLETED }) item { Text("Your completed quests will appear here.") }
+        items(completed, key = { "completed-${it.assignment.questId}" }) { progress ->
+            no.ntnu.prog2007.questbook.ui.personal.PersonalQuestCard(progress, onPersonalQuest)
+        }
+        items(quests.filter { it.status == QuestStatus.COMPLETED }, key = { "legacy-${it.id}" }) { quest -> QuestCard(quest) { onQuestClick(quest.id) } }
     }
 }

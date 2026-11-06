@@ -4,7 +4,9 @@ package no.ntnu.prog2007.questbook.model
  * A challenge belonging to one QuestBook group.
  *
  * User IDs identify people. assignedTo is only the display name.
- * Null assignedUserId means the quest has not been assigned.
+ * Legacy assigned quests use assignedUserId directly. New shared definitions are classified by
+ * GroupChallengeEntity: OPEN permits each member's own attempt, DRAW belongs to its drawer,
+ * and WEEKLY is an aggregate goal. Each owned attempt has its own quest row and assigned UID.
  *
  * Timestamps use milliseconds since the Unix epoch.
  */

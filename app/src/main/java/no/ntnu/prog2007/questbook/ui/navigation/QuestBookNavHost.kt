@@ -38,9 +38,21 @@ fun QuestBookNavHost(trackingRequest: Pair<String, String>? = null, onTrackingOp
     val personal: no.ntnu.prog2007.questbook.ui.personal.PersonalQuestsViewModel = viewModel(
         factory = androidx.compose.runtime.remember { no.ntnu.prog2007.questbook.ui.personal.PersonalQuestsViewModel.Factory(context) })
     val personalState by personal.state.collectAsStateWithLifecycle()
+    val challenges: no.ntnu.prog2007.questbook.ui.challenges.GroupChallengesViewModel = viewModel(
+        factory = androidx.compose.runtime.remember { no.ntnu.prog2007.questbook.ui.challenges.GroupChallengesViewModel.Factory(context) })
+    val challengeState by challenges.state.collectAsStateWithLifecycle()
     fun openQuest(id: String) {
-        val route = if (no.ntnu.prog2007.questbook.data.personal.PersonalQuestIds.isPersonalQuest(id)) "personal" else "quest"
-        navController.navigate("$route/${Uri.encode(id)}")
+        val parent = challengeState.snapshot.attempts.find { it.attemptId == id }?.challengeId ?: id
+        if (challengeState.snapshot.challenges.any { it.questId == parent }) {
+            navController.navigate("challenge/${Uri.encode(parent)}")
+        } else if (no.ntnu.prog2007.questbook.data.personal.PersonalQuestIds.isPersonalQuest(id)) {
+            navController.navigate("personal/${Uri.encode(id)}")
+        } else {
+            // Quest cards and shared-definition observers can update in different frames after Create.
+            challenges.resolveParent(id) { savedParent ->
+                navController.navigate(if (savedParent != null) "challenge/${Uri.encode(savedParent)}" else "quest/${Uri.encode(id)}")
+            }
+        }
     }
     // One source supplies matching group summaries to Home, overview, and detail pages.
     val groupsViewModel: GroupsViewModel = viewModel()
@@ -130,20 +142,22 @@ fun QuestBookNavHost(trackingRequest: Pair<String, String>? = null, onTrackingOp
                     groups = groups,
                     onGroupClick = { id -> navController.navigate("group/$id") },
                     onAddGroup = { navController.navigate("addgroup") },
-                    personalState = personalState, onPersonalQuest = ::openQuest, onRefreshPersonal = personal::refresh,
-                    onNewActivity = { navController.navigate("logactivity") }
+                    challengeState = challengeState,
+                    personalState = personalState, onPersonalQuest = ::openQuest, onRefreshPersonal = personal::refresh
                 )
             }
 
             composable(
-                route = "quest/{questId}",
+                route = "quest/{questId}?start={start}",
                 arguments = listOf(
-                    navArgument("questId") { type = NavType.StringType }
+                    navArgument("questId") { type = NavType.StringType },
+                    navArgument("start") { type = NavType.BoolType; defaultValue = false }
                 )
             ) { backStackEntry ->
                 val questId = backStackEntry.arguments?.getString("questId").orEmpty()
                 QuestScreen(
                     questId = questId,
+                    startOnOpen = backStackEntry.arguments?.getBoolean("start") == true,
                     onAddPhotoClick = { navController.navigate("addphoto/${Uri.encode(questId)}") },
                     onMemoriesClick = { openTab("questbook") },
                     onViewRoute = { navController.navigate("savedroute/${Uri.encode(questId)}") },
@@ -169,6 +183,7 @@ fun QuestBookNavHost(trackingRequest: Pair<String, String>? = null, onTrackingOp
 
             composable("questbook") {
                 QuestBookScreen(
+                    shared = challengeState,
                     onQuestClick = ::openQuest,
                     onRouteClick = { id -> navController.navigate("savedroute/${Uri.encode(id)}") })
             }
@@ -202,11 +217,9 @@ fun QuestBookNavHost(trackingRequest: Pair<String, String>? = null, onTrackingOp
                             "createquest/${Uri.encode(groupId)}"
                         )
                     },
-                    onQuestClick = { questId ->
-                        navController.navigate(
-                            "quest/${Uri.encode(questId)}"
-                        )
-                    }
+                    onQuestClick = ::openQuest,
+                    challengeState = challengeState,
+                    onGetQuest = { challenges.draw(groupId) { id -> navController.navigate("challenge/${Uri.encode(id)}") } }
                 )
             }
 
@@ -236,6 +249,7 @@ fun QuestBookNavHost(trackingRequest: Pair<String, String>? = null, onTrackingOp
                     CreateQuestScreen(
                         groupId = group.id,
                         groupName = group.name,
+                        saveQuest = challenges::saveCreated,
                         onBack = { navController.popBackStack() },
                         onCreated = { navController.popBackStack() }
                     )
@@ -246,21 +260,27 @@ fun QuestBookNavHost(trackingRequest: Pair<String, String>? = null, onTrackingOp
                 val id = backStackEntry.arguments?.getString("questId").orEmpty()
                 no.ntnu.prog2007.questbook.ui.personal.PersonalQuestDetail(id, personalState,
                     onBack = { navController.popBackStack() },
-                    onTrack = { personal.track(id) { navController.navigate("quest/${Uri.encode(id)}") } },
+                    onTrack = { personal.track(id) { target -> navController.navigate("quest/${Uri.encode(target)}?start=true") } },
                     onLog = { quantity, minutes -> personal.logManual(id, quantity, minutes) },
                     onPhoto = { navController.navigate("addphoto/${Uri.encode(id)}") },
-                    onMemories = { openTab("questbook") }, onRefresh = personal::refresh,
-                    onNewActivity = { navController.navigate("logactivity") })
+                    onMemories = { openTab("questbook") }, onRefresh = personal::refresh)
             }
 
+            composable("challenge/{questId}", arguments = listOf(navArgument("questId") { type = NavType.StringType })) { backStackEntry ->
+                val id = backStackEntry.arguments?.getString("questId").orEmpty()
+                no.ntnu.prog2007.questbook.ui.challenges.GroupChallengeScreen(id, challengeState, personalState,
+                    onBack = { navController.popBackStack() }, onOpen = { challenges.open(id) },
+                    onTrack = { child -> personal.track(child) { target -> navController.navigate("quest/${Uri.encode(target)}?start=true") } },
+                    onLog = challenges::logAttempt,
+                    onPhoto = { child -> navController.navigate("addphoto/${Uri.encode(child)}") },
+                    onMemories = { openTab("questbook") },
+                    onWeeklyTrack = { challenges.startWeekly(id) { child -> navController.navigate("quest/${Uri.encode(child)}?start=true") } },
+                    onWeeklyLog = { amount -> challenges.logWeekly(id, amount) }, onRetry = { challenges.retry(); personal.refresh() })
+            }
+
+            // Compatibility for old saved back stacks: the unrestricted logger has been removed.
             composable("logactivity") {
-                no.ntnu.prog2007.questbook.ui.personal.LogPersonalActivityScreen(personalState,
-                    onBack = { navController.popBackStack() },
-                    onSave = { metric, quantity, minutes, gps -> personal.newActivity(metric, quantity, minutes, gps) { id, useGps ->
-                        navController.navigate("${if (useGps) "quest" else "personal"}/${Uri.encode(id)}") {
-                            popUpTo("logactivity") { inclusive = true }
-                        }
-                    } })
+                no.ntnu.prog2007.questbook.ui.personal.LogPersonalActivityScreen { openTab("quests") }
             }
 
             composable("addgroup") {
@@ -290,9 +310,8 @@ fun QuestBookNavHost(trackingRequest: Pair<String, String>? = null, onTrackingOp
             }
             composable("quests") {
                 QuestsScreen(
-                    onQuestClick = ::openQuest, personalState = personalState,
-                    onPersonalQuest = ::openQuest, onRefreshPersonal = personal::refresh,
-                    onNewActivity = { navController.navigate("logactivity") }
+                    onQuestClick = ::openQuest, personalState = personalState, challengeState = challengeState,
+                    onPersonalQuest = ::openQuest, onRefreshPersonal = personal::refresh
                 )
             }
             composable("profile") {

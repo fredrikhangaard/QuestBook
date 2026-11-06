@@ -64,23 +64,16 @@ class PersonalQuestsViewModel(private val db: QuestBookDatabase,
         store.logManual(uid, id, amount, time, operation, now())
         pending = null
     }
-    fun track(id: String, onReady: () -> Unit) = action { uid ->
-        store.prepareGps(uid, id, now())
-        if (AppServices.authRepository.currentUserId == uid) onReady()
-    }
-    fun newActivity(metric: ActivityMetric, quantity: String, minutes: String, gps: Boolean,
-        onReady: (String, Boolean) -> Unit) = action { uid ->
-        val amount = quantity.trim().replace(',', '.').toDoubleOrNull() ?: error("Enter a valid activity amount.")
-        val time = if (minutes.isBlank()) 0.0 else minutes.trim().replace(',', '.').toDoubleOrNull() ?: error("Enter valid active minutes.")
-        val key = "$uid/new/$metric/$quantity/$minutes/$gps"
-        val operation = pending?.takeIf { it.first == key }?.second ?: UUID.randomUUID().toString().also { pending = key to it }
-        val id = store.createActivity(uid, metric, amount, time, operation, gps, now(), zone())
-        pending = null
-        val snapshot = store.refresh(uid, now(), zone())
-        if (AppServices.authRepository.currentUserId == uid) {
-            mutable.update { it.copy(quests = snapshot.quests) }
-            onReady(id, gps)
-        }
+    /** A weekly distance goal starts a bounded 5 km (or remaining-distance) quest, never passive tracking. */
+    fun track(id: String, onReady: (String) -> Unit) = action { uid ->
+        val progress = checkNotNull(state.value.quests.find { it.assignment.questId == id })
+        val target = if (progress.assignment.cadence == "WEEKLY") {
+            val remaining = progress.assignment.target - progress.value
+            check(progress.hasSavedSession || (remaining > 0 && now() < progress.assignment.periodEndMillis))
+            store.boundedWalk(uid, id, remaining, now(), zone())
+        } else id
+        store.prepareGps(uid, target, now())
+        if (AppServices.authRepository.currentUserId == uid) onReady(target)
     }
     class Factory(private val context: Context) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {

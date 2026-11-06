@@ -37,7 +37,7 @@ import no.ntnu.prog2007.questbook.data.repository.QuestDependencies
 @Composable
 fun QuestScreen(questId: String, onAddPhotoClick: () -> Unit = {}, onBack: () -> Unit = {},
     canAccessGroup: (String) -> Boolean = { false }, group: GroupSummary? = null,
-    onMemoriesClick: () -> Unit = {}, onViewRoute: () -> Unit = {}) {
+    onMemoriesClick: () -> Unit = {}, onViewRoute: () -> Unit = {}, startOnOpen: Boolean = false) {
     val context = LocalContext.current
     // A remembered factory must still read new group membership when Firestore delivers updates.
     val latestGroup by rememberUpdatedState(group)
@@ -80,6 +80,18 @@ fun QuestScreen(questId: String, onAddPhotoClick: () -> Unit = {}, onBack: () ->
 
     val quest = quests.find { it.id == questId }
     val hasGroupAccess = quest?.let { canAccessGroup(it.groupId) } == true
+    var issuedStart by androidx.compose.runtime.saveable.rememberSaveable(questId) { mutableStateOf(false) }
+    LaunchedEffect(startOnOpen, trackingUi.isLoading, quest?.id, hasGroupAccess) {
+        // This flag comes only from an explicit Start quest tap, never from opening a notification or history card.
+        if (startOnOpen && !issuedStart && !trackingUi.isLoading && quest != null && hasGroupAccess) {
+            issuedStart = true
+            if (!gps.isTracking && trackingUi.result == null && !gps.distanceCompleted) {
+                if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED)
+                    startWithNotification()
+                else permission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+            }
+        }
+    }
     // Quest/Firestore observations can finish after the ViewModel's first load.
     LaunchedEffect(quest?.id, hasGroupAccess) {
         if (quest != null && hasGroupAccess) tracking.load()
@@ -112,7 +124,7 @@ fun QuestScreen(questId: String, onAddPhotoClick: () -> Unit = {}, onBack: () ->
             }
         }
         // Assignment is available to group members only before tracking has started.
-        if (quest.status == QuestStatus.NOT_STARTED && hasGroupAccess && !no.ntnu.prog2007.questbook.data.personal.PersonalQuestIds.isPersonalGroup(quest.groupId)) {
+        if (!questId.startsWith("attempt-") && quest.status == QuestStatus.NOT_STARTED && hasGroupAccess && !no.ntnu.prog2007.questbook.data.personal.PersonalQuestIds.isPersonalGroup(quest.groupId)) {
             OutlinedButton(onClick = assignment::open,
                 enabled = !trackingUi.isBusy && !assignmentUi.isSaving,
                 modifier = Modifier.fillMaxWidth()) {

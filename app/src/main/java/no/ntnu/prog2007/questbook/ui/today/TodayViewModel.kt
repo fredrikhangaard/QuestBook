@@ -15,13 +15,13 @@ class TodayViewModel(
 
     val uiState = repository.quests
         .map { quests ->
-            TodayUiState(quests = quests.filterNot { no.ntnu.prog2007.questbook.data.personal.PersonalQuestIds.isPersonalGroup(it.groupId) })
+            TodayUiState(quests = quests.filterNot { no.ntnu.prog2007.questbook.data.personal.PersonalQuestIds.isPersonalGroup(it.groupId) || it.id.startsWith("attempt-") })
         }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = TodayUiState(
-                quests = repository.getQuests().filterNot { no.ntnu.prog2007.questbook.data.personal.PersonalQuestIds.isPersonalGroup(it.groupId) }
+                quests = repository.getQuests().filterNot { no.ntnu.prog2007.questbook.data.personal.PersonalQuestIds.isPersonalGroup(it.groupId) || it.id.startsWith("attempt-") }
             )
         )
 }
