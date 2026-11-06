@@ -21,6 +21,7 @@ import no.ntnu.prog2007.questbook.data.sync.ChallengeCloud.ACTIVITY
 import no.ntnu.prog2007.questbook.data.sync.ChallengeCloud.ATTEMPTS
 import no.ntnu.prog2007.questbook.data.sync.ChallengeCloud.CHALLENGES
 import no.ntnu.prog2007.questbook.data.sync.ChallengeCloud.COMPLETIONS
+import no.ntnu.prog2007.questbook.data.sync.ChallengeCloud.PHOTOS
 import no.ntnu.prog2007.questbook.data.sync.ChallengeCloud.SPELLS
 import no.ntnu.prog2007.questbook.location.database.QuestBookDatabase
 import no.ntnu.prog2007.questbook.model.Group
@@ -37,7 +38,7 @@ import no.ntnu.prog2007.questbook.model.Group
  * with "insert if absent", so applying the same snapshot twice changes nothing. Room's flows
  * then update the screens as before.
  *
- * GPS routes and photos never leave the phone in this phase.
+ * Photos are shared only for completed group quests; personal photos and GPS routes never leave the phone.
  */
 class FirestoreChallengeSync(
     private val db: QuestBookDatabase,
@@ -87,6 +88,7 @@ class FirestoreChallengeSync(
         val myActivity = questActivities(myResults, db.personalQuestDao().getEntries(uid))
             .filter { it.at >= now - ChallengeCloud.ACTIVITY_WINDOW_MILLIS }
         val spells = dao.spells()
+        val myPhotos = dao.photoRefs(uid)
 
         for (group in groups.filter { uid in it.memberIds }) {
             val root = groupDocument(group.id)
@@ -116,11 +118,24 @@ class FirestoreChallengeSync(
                 }
             }
 
+            // The group's completions: results of this account's attempts at the group's quests.
+            val completions = myResults.filter { result -> attempts.any { it.attemptId == result.questId } }
             if (ready(COMPLETIONS)) {
-                for (result in myResults) {
-                    val attempt = attempts.find { it.attemptId == result.questId } ?: continue
+                for (result in completions) {
+                    val attempt = attempts.first { it.attemptId == result.questId }
                     write(root.collection(COMPLETIONS).document(result.id),
                         ChallengeCloud.completionToMap(result, attempt.challengeId, name))
+                }
+            }
+
+            // Photos for those completions only. The image bytes are loaded just before uploading.
+            if (ready(PHOTOS)) {
+                for (ref in myPhotos.filter { photo -> completions.any { it.id == photo.resultId } }) {
+                    val document = root.collection(PHOTOS).document(ref.id)
+                    if (document.path in known) continue
+                    val photo = dao.photo(ref.id) ?: continue
+                    if (photo.jpegBytes.size > ChallengeCloud.MAX_PHOTO_BYTES) continue
+                    write(document, ChallengeCloud.photoToMap(photo))
                 }
             }
 
@@ -142,6 +157,7 @@ class FirestoreChallengeSync(
     private fun documents(groupId: String, collection: String, since: Long): Flow<List<DocumentSnapshot>> = callbackFlow {
         var query: Query = groupDocument(groupId).collection(collection)
         if (collection == ACTIVITY) query = query.whereGreaterThanOrEqualTo("at", since)
+        if (collection == PHOTOS) query = query.whereGreaterThanOrEqualTo("createdAtMillis", since)
         val registration = query.addSnapshotListener { snapshot, error ->
             if (error != null) {
                 Log.w(TAG, "Could not sync $collection for group $groupId", error)
@@ -174,6 +190,10 @@ class FirestoreChallengeSync(
                             ?.takeIf { it.userId != uid }?.let { dao.insertResultIfAbsent(it) }
                         ACTIVITY -> ChallengeCloud.activityFromMap(doc.id, data)
                             ?.takeIf { it.userId != uid }?.let { dao.insertEntryIfAbsent(it) }
+                        // Checked first, so a photo already in Room is not decoded again on every snapshot.
+                        PHOTOS -> if (data["userId"] != uid && !dao.hasPhoto(doc.id)) {
+                            ChallengeCloud.photoFromMap(doc.id, group.id, data)?.let { dao.insertPhotoIfAbsent(it) }
+                        }
                         SPELLS -> {
                             // ESTIMATE gives our own pending write a time before the server answers.
                             val joinedAt = doc.getTimestamp("joinedAt", DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)

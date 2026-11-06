@@ -18,6 +18,9 @@ data class GroupChallengeEntity(@PrimaryKey val questId: String, val groupId: St
 @Entity(tableName = "quest_attempts", indices = [Index(value = ["challengeId", "userId"], unique = true)])
 data class QuestAttemptEntity(@PrimaryKey val attemptId: String, val challengeId: String, val userId: String)
 
+/** Just enough of a photo to decide whether to upload it, without loading the image bytes. */
+data class PhotoRef(val id: String, val resultId: String)
+
 /** Membership spells exclude activity before joining, after leaving, and during a leave/rejoin gap. */
 @Entity(tableName = "group_membership_spells")
 data class GroupMembershipSpell(@PrimaryKey val id: String, val groupId: String, val userId: String,
@@ -51,4 +54,8 @@ interface GroupChallengeDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertAttemptIfAbsent(row: QuestAttemptEntity): Long
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertResultIfAbsent(row: QuestResultEntity): Long
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertEntryIfAbsent(row: ActivityEntryEntity): Long
+    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertPhotoIfAbsent(row: MemoryPhotoEntity): Long
+    @Query("SELECT id, resultId FROM memory_photos WHERE userId = :uid") suspend fun photoRefs(uid: String): List<PhotoRef>
+    @Query("SELECT * FROM memory_photos WHERE id = :id") suspend fun photo(id: String): MemoryPhotoEntity?
+    @Query("SELECT EXISTS(SELECT 1 FROM memory_photos WHERE id = :id)") suspend fun hasPhoto(id: String): Boolean
 }
