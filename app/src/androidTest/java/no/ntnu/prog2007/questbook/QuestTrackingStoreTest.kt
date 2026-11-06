@@ -71,8 +71,8 @@ class QuestTrackingStoreTest {
         } finally { db.close() }
     }
 
-    @Test fun upgradesFromVersionsOneThroughFivePreserveExistingRoutes() = runBlocking {
-        for (version in listOf(1, 2, 3, 4, 5)) {
+    @Test fun upgradesFromVersionsOneThroughSixPreserveExistingRoutes() = runBlocking {
+        for (version in listOf(1, 2, 3, 4, 5, 6)) {
             val name = "gps-upgrade-test-$version.db"
             context.deleteDatabase(name)
             // Build a real old-version database from its exported schema, then let Room migrate it.
@@ -102,14 +102,23 @@ class QuestTrackingStoreTest {
                 raw.execSQL("INSERT INTO quest_results VALUES ('legacy-result', 'done', 'group', 'me', 'Old result', 'Me', 5000, 2000, 100, 'old-route')")
             }
             if (version >= 4) raw.execSQL("INSERT INTO memory_photos VALUES ('photo', 'legacy-result', 'done', 'group', 'me', 'Old photo', X'010203', 5000)")
+            if (version >= 6) {
+                raw.execSQL("INSERT INTO personal_quests VALUES ('old-time', 'me', 'move-10', 'DAILY', 'day', 'daily', 'Move 10 minutes', '', 'ACTIVE_MINUTES', 10.0, 0, 9999999999999, 'Europe/Oslo', NULL)")
+                raw.execSQL("INSERT INTO activity_entries VALUES ('old-set', 'me', 'old-time', 1000, 0.0, 600000, 0, 0, NULL)")
+            }
             raw.version = version
             raw.close()
             val db = Room.databaseBuilder(context, QuestBookDatabase::class.java, name)
-                .addMigrations(QuestBookDatabase.MIGRATION_1_2, QuestBookDatabase.MIGRATION_2_3, QuestBookDatabase.MIGRATION_3_4, QuestBookDatabase.MIGRATION_4_5, QuestBookDatabase.MIGRATION_5_6).build()
+                .addMigrations(QuestBookDatabase.MIGRATION_1_2, QuestBookDatabase.MIGRATION_2_3, QuestBookDatabase.MIGRATION_3_4, QuestBookDatabase.MIGRATION_4_5, QuestBookDatabase.MIGRATION_5_6, QuestBookDatabase.MIGRATION_6_7).build()
             try {
                 val legacy = db.routePointDao().getPointsForSession("legacy").first()
                 assertEquals(1, legacy.size)
                 assertFalse(legacy.single().startsSegment)
+                if (version >= 6) {
+                    assertEquals("RETIRED", db.personalQuestDao().getAssignment("old-time")!!.cadence)
+                    assertEquals(0, db.personalQuestDao().getEntry("old-set")!!.bodyweightReps)
+                    assertEquals(600000L, db.personalQuestDao().getEntry("old-set")!!.activeMillis)
+                }
                 if (version >= 2) assertEquals("Old quest", db.questDao().getQuest("legacy-quest")!!.title)
                 if (version >= 3) {
                     assertEquals(100.0, db.trackingDao().getSession("legacy-quest")!!.distanceMeters, 0.0)
