@@ -11,6 +11,7 @@ Start with the flow below, then use the file table to find the code responsible 
 | `ui/quest/assignment/AssignQuestViewModel.kt` | Checks group membership and quest status, loads usernames, and requests local assignment persistence. |
 | `data/repository/QuestRepository.kt` | Interface for observable quest data and assignment. Room is the current implementation. |
 | `ui/quest/tracking/QuestTrackingViewModel.kt` | Coordinates loading, starting, pausing, and finishing the selected assigned quest. |
+| `location/QuestTrackingService.kt` | Keeps an explicitly started walk running with its notification, timer and access checks while the UI is hidden. |
 | `location/GpsRepository.kt` | Filters position samples, measures active duration, and serializes writes. It does not request permission or select a quest. |
 | `location/AndroidGpsSource.kt` and `LocationTracker.kt` | Adapt Android's Fused Location callbacks into the plain route-point model. |
 | `data/tracking/RoomQuestTrackingStore.kt` | Performs the database transactions for starting, checkpointing, and completing a quest. |
@@ -35,7 +36,7 @@ The `(You)` label is for presentation only. It is never written as the person's 
 1. Start requests precise Android location permission. Opening quest details alone does not request permission or start tracking.
 2. After permission is granted, `QuestTrackingViewModel.start()` checks the current quest, UID, group access, type and distance target again.
 3. `RoomQuestTrackingStore.begin()` creates the session and marks the quest IN_PROGRESS in one transaction. A resume reuses the existing session ID.
-4. `GpsRepository.resumeTracking()` starts the provider. It clears the current segment's anchor so movement during a pause is not counted.
+4. The ViewModel rechecks account/group access after Room returns, then requests `QuestTrackingService` only if the page is still visible. The service checks location settings and precise permission, promotes itself with a notification, then calls the same `GpsRepository.resumeTracking()`. Resume clears the current segment's anchor so movement during a pause is not counted.
 5. Each callback carries a request-generation token. Stop increments that token, so late callbacks from an old request cannot alter the route.
 
 The test screen has its own `GpsTrackingViewModel`. It reuses the engine with the original 5 km default and point-only persistence; it does not create quest results.
@@ -48,13 +49,13 @@ The first accepted point anchors a segment. Each later accepted point adds its d
 
 Every accepted point and its checkpoint enter one write queue. Quest tracking saves them together in a Room transaction. If that transaction fails, the command remains first in the pending queue; later commands cannot skip it. `flush()` inserts a barrier and waits until all earlier commands have succeeded, or reports the write failure.
 
-The screen timer updates active elapsed time once per second. The engine queues a time checkpoint every five active seconds even if no accurate GPS fix has arrived. Pause queues the final elapsed time immediately.
+The service timer updates active elapsed time once per second. The engine queues a time checkpoint every five active seconds even if no accurate GPS fix has arrived. Pause queues the final elapsed time immediately. The standalone GPS test screen retains its own timer.
 
 ## 4. Leaving and reopening details
 
-This implementation is foreground-only. Leaving details, backgrounding the app, or locking the device pauses tracking. Returning makes Resume available; it does not resume automatically.
+A running walk continues when details are left, the app backgrounds or the device locks. The notification opens the active quest and offers Pause tracking. Only one quest can track at once. Location settings, account changes and observed loss of quest/group access pause it. A pending database start cannot start GPS after its screen has stopped.
 
-A paused controller is retained per user and quest during the app process so reopening details cannot read an older Room snapshot while writes are pending. After process restart, the controller is gone and the latest successfully persisted checkpoint plus its stored route are loaded instead. Recovery does not recreate distance/time that had not yet been saved before termination.
+Active and paused controllers are retained per user and quest during the app process so reopening details cannot read an older Room snapshot while writes are pending. The service owns a running walk independently of the screen ViewModel. After process restart, the controller is gone and the latest successfully persisted checkpoint plus its stored route are loaded paused instead. Recovery does not recreate distance/time that had not yet been saved before termination. There is no automatic GPS restart after process death, reboot, force-stop or Android Stop.
 
 ## 5. Completing the quest
 
@@ -89,5 +90,6 @@ The screen displays success only after this transaction returns. It then release
 - Tracking ViewModel tests cover assignment/group eligibility, in-flight start cancellation, completion and retry behavior.
 - Assignment ViewModel tests cover membership changes, UID/name persistence, cancellation and save failures.
 - Emulator tests exercise the actual Room migrations/transactions and the member-picker interaction.
+- Background-service tests exercise screen-off checkpointing, notification Pause, account/location interruptions, one-active-walk enforcement and production notification navigation across Activity recreation.
 
-See [the testing guide](gps-testing.md) for manual verification. Continuous background tracking, map rendering, shared result/assignment synchronization and the Memories/photo feed are separate work. Existing photo navigation is preserved, but linking photos to the new result model is not part of this branch.
+See [the testing guide](gps-testing.md) for manual verification and [functional readiness](app-readiness.md) for remaining acceptance work. Local result-linked photos, Memories, personal goals and an offline route drawing are implemented. A geographic map and shared result/assignment synchronization remain separate work. Physical-phone GPS and battery behavior still require outdoor testing.
