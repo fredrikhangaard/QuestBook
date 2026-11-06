@@ -36,7 +36,7 @@ class GroupShortcutsTest {
     @Test fun emptyStateStillOffersCreateOrJoin() {
         var adding = false
         compose.setContent { QuestBookTheme { HomeGroups(emptyList(), {}, { adding = true }) } }
-        compose.onNodeWithText("Join or create a group to get started.").assertIsDisplayed()
+        compose.onNodeWithText("Join friends for shared quests.").assertIsDisplayed()
         compose.onNodeWithTag("home_add_group").performClick()
         compose.runOnIdle { assertTrue(adding) }
     }
