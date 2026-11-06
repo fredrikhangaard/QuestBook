@@ -7,6 +7,27 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class GpsRepositoryTest {
+    @Test fun providerStartFailureKeepsSessionPausedAndRetryable() = runBlocking {
+        var failing = true
+        val source = object : GpsSource {
+            override fun start(onPoint: (RoutePoint, Boolean) -> Unit) {
+                check(!failing) { "Provider unavailable" }
+            }
+            override fun stop() {}
+        }
+        val repository = GpsRepository(source, {}, Dispatchers.Unconfined)
+        try {
+            repository.startTracking(sessionId = "retry-me")
+            assertFalse(repository.state.value.isTracking)
+            assertEquals("retry-me", repository.state.value.sessionId)
+            assertTrue(repository.state.value.status.contains("Check precise location"))
+            failing = false
+            repository.resumeTracking()
+            assertTrue(repository.state.value.isTracking)
+            assertEquals("retry-me", repository.state.value.sessionId)
+        } finally { repository.close() }
+    }
+
     private class Source : GpsSource {
         lateinit var callback: (RoutePoint, Boolean) -> Unit
         var starts = 0
