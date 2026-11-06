@@ -26,6 +26,24 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
+    function groupPath(groupId) {
+      return /databases/$(database)/documents/groups/$(groupId);
+    }
+
+    function attemptPath(groupId, attemptDoc) {
+      return /databases/$(database)/documents/groups/$(groupId)/attempts/$(attemptDoc);
+    }
+
+    // Used by the group's subcollections, where `resource` is the child document, not the group.
+    function isGroupMember(groupId) {
+      return signedIn() && request.auth.uid in get(groupPath(groupId)).data.memberIds;
+    }
+
+    // Server clock in milliseconds, compared with the app's *Millis fields.
+    function nowMillis() {
+      return request.time.toMillis();
+    }
+
     // Public profile: only the username, so group members can see each other's names.
     match /users/{userId} {
       allow read: if signedIn();
@@ -73,6 +91,122 @@ service cloud.firestore {
         && request.resource.data.get('joinedWith', {}).get(request.auth.uid, '') == resource.data.inviteCode;
 
       allow delete: if isUser(resource.data.ownerId);
+
+      // ---------- Group quests (Firebase handoff, phase 1) ----------
+      // Every document below can be created once and never changed or deleted, so a retry
+      // or a second phone cannot overwrite it. Members can read everything in their group.
+
+      // Shared quest definitions. The document ID is the quest ID.
+      match /challenges/{questId} {
+        function validChallenge(d) {
+          return d.keys().hasOnly(['kind', 'metric', 'target', 'periodKey', 'startMillis', 'endMillis',
+              'zoneId', 'memberCount', 'templateId', 'assigneeId', 'title', 'description', 'type',
+              'assignedTo', 'requiredDistanceKm', 'createdByUserId', 'createdAtMillis'])
+            && d.title is string && d.title.size() > 0 && d.title.size() <= 100
+            && d.description is string && d.description.size() <= 500
+            && d.metric is string && d.type is string
+            && d.target is number && d.target > 0 && d.target <= 1000000
+            && d.startMillis is int && d.endMillis is int && d.endMillis > d.startMillis
+            && d.memberCount is int && d.memberCount >= 1
+            && d.zoneId is string && d.zoneId.size() <= 60
+            && d.templateId is string && d.periodKey is string;
+        }
+
+        // Any member may share a quest they made. It is open to every member.
+        function validOpen(d) {
+          return d.kind == 'OPEN' && d.assigneeId == null && d.templateId == 'custom'
+            && d.createdByUserId == request.auth.uid
+            && d.metric in ['WALK_METERS', 'BODYWEIGHT_REPS', 'OUTDOOR_VISITS', 'CONFIRMATIONS']
+            && ((d.metric == 'WALK_METERS' && d.target <= 100000) || d.target <= 10000);
+        }
+
+        // A drawn quest belongs to the member who drew it, and lasts at most about a week.
+        function validDraw(d) {
+          return d.kind == 'DRAW' && d.assigneeId == request.auth.uid
+            && d.createdByUserId == request.auth.uid && d.target <= 100000
+            && d.endMillis <= nowMillis() + 8 * 86400000;
+        }
+
+        // This week's group goal. The first member to upload it wins; the target must be the
+        // per-member goal times the group's real member count right now.
+        function validWeekly(d) {
+          return d.kind == 'WEEKLY' && d.assigneeId == null
+            && d.memberCount == get(groupPath(groupId)).data.memberIds.size()
+            && ((d.metric == 'WALK_METERS' && d.target == 5000 * d.memberCount)
+              || (d.metric == 'BODYWEIGHT_REPS' && d.target == 50 * d.memberCount)
+              || (d.metric == 'OUTDOOR_VISITS' && d.target == d.memberCount))
+            && d.endMillis - d.startMillis >= 601200000      // 7 days minus 1 hour (summer time)
+            && d.endMillis - d.startMillis <= 608400000      // 7 days plus 1 hour (winter time)
+            && nowMillis() >= d.startMillis - 3600000
+            && nowMillis() < d.endMillis + 3600000;
+        }
+
+        allow read: if isGroupMember(groupId);
+        allow create: if isGroupMember(groupId)
+          && validChallenge(request.resource.data)
+          && (validOpen(request.resource.data) || validDraw(request.resource.data) || validWeekly(request.resource.data));
+      }
+
+      // One attempt per member and challenge: the document ID must be "<challengeId>_<uid>".
+      // A drawn quest can only be attempted by the member who drew it.
+      match /attempts/{attemptDoc} {
+        allow read: if isGroupMember(groupId);
+        allow create: if isGroupMember(groupId)
+          && request.resource.data.keys().hasOnly(['attemptId', 'challengeId', 'userId'])
+          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.attemptId is string
+          && attemptDoc == request.resource.data.challengeId + '_' + request.auth.uid
+          && existsAfter(/databases/$(database)/documents/groups/$(groupId)/challenges/$(request.resource.data.challengeId))
+          && (getAfter(/databases/$(database)/documents/groups/$(groupId)/challenges/$(request.resource.data.challengeId)).data.assigneeId == null
+            || getAfter(/databases/$(database)/documents/groups/$(groupId)/challenges/$(request.resource.data.challengeId)).data.assigneeId == request.auth.uid);
+      }
+
+      // A finished attempt, without the GPS route. Only for the member's own attempt.
+      match /completions/{resultId} {
+        allow read: if isGroupMember(groupId);
+        allow create: if isGroupMember(groupId)
+          && request.resource.data.keys().hasOnly(['questId', 'challengeId', 'userId', 'questTitle',
+              'participantName', 'completedAtMillis', 'durationMillis', 'distanceMeters'])
+          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.questTitle is string && request.resource.data.questTitle.size() <= 100
+          && request.resource.data.participantName is string && request.resource.data.participantName.size() <= 30
+          && request.resource.data.completedAtMillis is int
+          && request.resource.data.completedAtMillis <= nowMillis() + 600000
+          && request.resource.data.durationMillis is int && request.resource.data.durationMillis >= 0
+          && (request.resource.data.distanceMeters == null
+            || (request.resource.data.distanceMeters is number
+              && request.resource.data.distanceMeters >= 0 && request.resource.data.distanceMeters <= 200000))
+          && getAfter(attemptPath(groupId, request.resource.data.challengeId + '_' + request.auth.uid)).data.attemptId == request.resource.data.questId;
+      }
+
+      // One activity event (amounts and a time only), used for the weekly group goal.
+      match /activity/{eventId} {
+        allow read: if isGroupMember(groupId);
+        allow create: if isGroupMember(groupId)
+          && request.resource.data.keys().hasOnly(['userId', 'at', 'distanceMeters', 'activeMillis',
+              'pushups', 'squats', 'visit', 'bodyweightReps'])
+          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.at is int && request.resource.data.at <= nowMillis() + 600000
+          && request.resource.data.distanceMeters is number
+          && request.resource.data.distanceMeters >= 0 && request.resource.data.distanceMeters <= 200000
+          && request.resource.data.activeMillis is int
+          && request.resource.data.activeMillis >= 0 && request.resource.data.activeMillis <= 86400000
+          && request.resource.data.pushups is int && request.resource.data.pushups >= 0 && request.resource.data.pushups <= 1000
+          && request.resource.data.squats is int && request.resource.data.squats >= 0 && request.resource.data.squats <= 1000
+          && request.resource.data.bodyweightReps is int
+          && request.resource.data.bodyweightReps >= 0 && request.resource.data.bodyweightReps <= 1000
+          && (request.resource.data.visit == null
+            || request.resource.data.visit in ['WATER', 'PARK', 'OUTDOOR', 'CONFIRMED']);
+      }
+
+      // When a member joined, stamped with the server's clock so nobody can backdate it.
+      match /spells/{userId} {
+        allow read: if isGroupMember(groupId);
+        allow create: if isUser(userId) && isGroupMember(groupId)
+          && request.resource.data.keys().hasOnly(['userId', 'joinedAt'])
+          && request.resource.data.userId == userId
+          && request.resource.data.joinedAt == request.time;
+      }
     }
 
     // Invite codes point to a group. A signed-in user can look up a code they already know
@@ -95,7 +229,5 @@ service cloud.firestore {
       allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if signedIn() && resource.data.userId == request.auth.uid;
     }
-
-    // TODO: add rules for quests when they are stored in Firestore.
   }
 }

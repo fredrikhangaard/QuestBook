@@ -19,6 +19,7 @@ data class GroupChallengesUiState(val userId: String? = null, val groups: List<G
 
 class GroupChallengesViewModel(private val db: QuestBookDatabase) : ViewModel() {
     private val store = GroupChallengeStore(db)
+    private val sync = AppServices.challengeSyncFactory(db)
     private val personal = PersonalQuestStore(db)
     private val mutable = MutableStateFlow(GroupChallengesUiState())
     val state = mutable.asStateFlow()
@@ -32,15 +33,24 @@ class GroupChallengesViewModel(private val db: QuestBookDatabase) : ViewModel() 
             AppServices.groupRepository.observeGroups(uid).collectLatest { groups ->
                 val names = try { AppServices.groupRepository.getUsernames(groups.flatMap { it.memberIds }.distinct()) }
                     catch (error: CancellationException) { throw error } catch (_: Exception) { emptyMap() }
-                combine(combine(db.questDao().observeQuests(), db.groupChallengeDao().observeChallenges()) { quests, _ -> quests }, db.groupChallengeDao().observeResults(),
-                    db.groupChallengeDao().observeEntries(), db.groupChallengeDao().observePhotos(),
-                    combine(refresh, flow { while (true) { emit(System.currentTimeMillis()); delay(30000) } }) { _, now -> now }
-                ) { _, _, _, _, now -> now }.collectLatest { now ->
-                    try {
-                        val snapshot = store.refresh(uid, groups, now, ZoneId.systemDefault())
-                        mutable.update { it.copy(groups = groups, names = names, snapshot = snapshot, loading = false) }
-                    } catch (error: CancellationException) { throw error }
-                    catch (_: Exception) { mutable.update { it.copy(loading = false, error = "Could not load group quests. Try again.") } }
+                coroutineScope {
+                    // Cloud -> Room for these groups. Stops by itself when the groups or the account change.
+                    launch { sync.listen(uid, groups) }
+                    combine(combine(db.questDao().observeQuests(), db.groupChallengeDao().observeChallenges()) { quests, _ -> quests }, db.groupChallengeDao().observeResults(),
+                        db.groupChallengeDao().observeEntries(), db.groupChallengeDao().observePhotos(),
+                        combine(refresh, flow { while (true) { emit(System.currentTimeMillis()); delay(30000) } }) { _, now -> now }
+                    ) { _, _, _, _, now -> now }.collectLatest { now ->
+                        try {
+                            val snapshot = store.refresh(uid, groups, now, ZoneId.systemDefault())
+                            mutable.update { it.copy(groups = groups, names = names, snapshot = snapshot, loading = false) }
+                        } catch (error: CancellationException) { throw error }
+                        catch (_: Exception) { mutable.update { it.copy(loading = false, error = "Could not load group quests. Try again.") } }
+                        // Room -> cloud, after refresh so this week's goal and new awards are included.
+                        // A failed upload must not hide the quests, so it is only logged.
+                        try { sync.push(uid, names[uid] ?: "Member", groups) }
+                        catch (error: CancellationException) { throw error }
+                        catch (error: Exception) { android.util.Log.w("GroupChallenges", "Could not upload group quests", error) }
+                    }
                 }
             }
         }

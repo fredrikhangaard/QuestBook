@@ -2,6 +2,7 @@ package no.ntnu.prog2007.questbook.data.challenges
 
 import androidx.room.*
 import kotlinx.coroutines.flow.Flow
+import no.ntnu.prog2007.questbook.data.local.QuestEntity
 import no.ntnu.prog2007.questbook.data.personal.ActivityEntryEntity
 import no.ntnu.prog2007.questbook.data.photo.MemoryPhotoEntity
 import no.ntnu.prog2007.questbook.data.tracking.QuestResultEntity
@@ -42,4 +43,12 @@ interface GroupChallengeDao {
     @Query("SELECT * FROM activity_entries") suspend fun entries(): List<ActivityEntryEntity>
     @Query("SELECT * FROM memory_photos") fun observePhotos(): Flow<List<MemoryPhotoEntity>>
     @Query("SELECT * FROM memory_photos") suspend fun photos(): List<MemoryPhotoEntity>
+
+    // Used by the cloud sync. "Insert if absent" makes applying the same snapshot twice harmless.
+    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertQuestIfAbsent(row: QuestEntity): Long
+    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertChallengeIfAbsent(row: GroupChallengeEntity): Long
+    @Update suspend fun updateChallenge(row: GroupChallengeEntity)
+    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertAttemptIfAbsent(row: QuestAttemptEntity): Long
+    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertResultIfAbsent(row: QuestResultEntity): Long
+    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertEntryIfAbsent(row: ActivityEntryEntity): Long
 }
