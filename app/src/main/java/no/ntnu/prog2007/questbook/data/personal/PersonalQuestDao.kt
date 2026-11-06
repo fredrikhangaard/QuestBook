@@ -15,7 +15,7 @@ data class PersonalQuestEntity(@PrimaryKey val questId: String, val userId: Stri
 @Entity(tableName = "activity_entries")
 data class ActivityEntryEntity(@PrimaryKey val id: String, val userId: String, val questId: String,
     val occurredAtMillis: Long, val distanceMeters: Double = 0.0, val activeMillis: Long = 0,
-    val pushups: Int = 0, val squats: Int = 0, val visitKind: String? = null)
+    val pushups: Int = 0, val squats: Int = 0, val visitKind: String? = null, @ColumnInfo(defaultValue = "0") val bodyweightReps: Int = 0)
 
 @Dao
 interface PersonalQuestDao {

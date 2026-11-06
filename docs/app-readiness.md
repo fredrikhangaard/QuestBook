@@ -10,6 +10,7 @@ This checklist separates local behavior that can be verified independently from 
 - Failed GPS writes remain retryable; completion waits for durable writes. Existing migration, owner-access, photo persistence and personal quest rollover tests remain regression checks.
 - Profile fetch failures show Retry loading profile, with logout still available. A late profile fetch cannot restore the old profile after logout.
 - Only the newest selected photo can update its preview. Read/save failures remain retryable. A pending save keeps its original photo and caption even if another picker result arrives.
+- Group adventures now include open per-member attempts, owned draws, one scaled weekly goal and local completion/photo galleries. See `group-quest-adventures.md`; cross-device synchronization remains a backend handoff.
 - Personal daily/weekly quests and physical activity accounting remain local per UID/device. See `personal-quests.md` for rollover, matching units and duplicate-credit rules.
 
 ## Shared backend handoff — still required

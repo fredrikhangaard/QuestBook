@@ -9,8 +9,8 @@ After process restart, the latest local checkpoint is loaded paused. Android's S
 - Sign in. For a group quest, open a group you belong to. Personal daily walks and extra GPS activities work without a group and are already assigned to you.
 - Use a DISTANCE quest with a finite positive distance target.
 - `assignedUserId` must equal the signed-in Firebase user ID. A display name alone does not grant assignment.
-- Open the quest and tap Assign quest. Pick a member (choose yourself for a GPS test) and confirm Assign. The actual UID and username are saved locally. Unassigned quests stay disabled; GPS does not claim them automatically.
-- Any current group member can assign or reassign a NOT_STARTED quest. Once started or completed, assignment is locked. The member list comes from the existing group repository, but assignment performs no Firestore writes.
+- New open group quests create a separate owned attempt for the member viewing the quest; Get quest assigns its attempt to the drawer automatically. The shared definition is never passed directly into GPS. See `group-quest-adventures.md` for the participation model.
+- The earlier assignment picker remains for legacy assigned-quest integration, not the new open/drawn quest flow. GPS still validates the actual assigned UID on every owned attempt.
 
 ## Device / emulator check
 
@@ -36,7 +36,7 @@ After process restart, the latest local checkpoint is loaded paused. Android's S
 
 ## Database checks
 
-Tracking sessions/results were introduced in Room version 3; the current schema is version 6, including later photos, segment boundaries and personal quests. Migrations preserve existing routes and quests. Never uninstall or clear app data to perform the migration check.
+Tracking sessions/results were introduced in Room version 3; the current schema is version 7, including photos, segment boundaries, personal quests and independent group attempts. Migrations preserve existing routes and quests. Never uninstall or clear app data to perform the migration check.
 
 During activity, `tracking_sessions.sessionId` matches `route_points.sessionId`. Accepted points and their checkpoint are written in one transaction, through one ordered writer. On completion, `quest_results.gpsSessionId` retains that link, `quests.status` becomes COMPLETED, and the active checkpoint is deleted in one transaction. Recorded route points remain.
 

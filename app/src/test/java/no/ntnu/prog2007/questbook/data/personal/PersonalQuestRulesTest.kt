@@ -43,8 +43,12 @@ class PersonalQuestRulesTest {
         assertEquals(1, events.size)
         assertEquals(5000.0, activityProgress(ActivityMetric.WALK_METERS, events, 100, 200, zone), 0.0)
     }
-    @Test fun weeklyPoolHasFiveDistinctFamiliesAndDailyPoolIncludesVisitsAndManualWorkouts() {
-        assertEquals(5, PersonalQuestPool.weeklyFamilies.size)
+    @Test fun weeklyPoolRemovesTimeAndDailyPoolHasVariedPromptsUsingExistingMetrics() {
+        assertEquals(4, PersonalQuestPool.weeklyFamilies.size)
+        assertFalse(PersonalQuestPool.weeklyFamilies.containsKey(ActivityMetric.ACTIVE_MINUTES))
+        assertTrue(PersonalQuestPool.daily.size >= 100)
+        assertTrue(PersonalQuestPool.groupDraws.any { it.description.contains("friend") })
+        assertTrue(PersonalQuestPool.daily.none { it.metric == ActivityMetric.ACTIVE_MINUTES })
         assertEquals(PersonalQuestPool.daily.size, PersonalQuestPool.daily.map { it.id }.distinct().size)
         assertTrue(PersonalQuestPool.daily.any { it.metric == ActivityMetric.WATER_VISITS })
         assertTrue(PersonalQuestPool.daily.any { it.metric == ActivityMetric.PUSHUPS && it.target == 30.0 })

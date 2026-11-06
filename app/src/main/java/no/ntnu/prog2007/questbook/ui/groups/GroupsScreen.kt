@@ -1,6 +1,7 @@
 package no.ntnu.prog2007.questbook.ui.groups
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
@@ -42,12 +43,17 @@ fun GroupDetailScreen(
     group: GroupSummary?,
     onBack: () -> Unit,
     onCreateQuest: () -> Unit,
-    onQuestClick: (String) -> Unit
+    onQuestClick: (String) -> Unit,
+    challengeState: no.ntnu.prog2007.questbook.ui.challenges.GroupChallengesUiState? = null,
+    onGetQuest: () -> Unit = {}
 ) {
     val allQuests by QuestDependencies.questRepository.quests
         .collectAsStateWithLifecycle()
 
-    val groupQuests = allQuests.filter { it.groupId == group?.id }
+    val definitions = challengeState?.snapshot?.challenges.orEmpty().filter { it.groupId == group?.id }
+    val weekly = definitions.firstOrNull { it.kind == "WEEKLY" && System.currentTimeMillis() in it.startMillis until it.endMillis }
+    val groupQuests = allQuests.filter { it.groupId == group?.id && !it.id.startsWith("attempt-") && challengeState?.snapshot?.attempts?.none { a -> a.attemptId == it.id } != false && it.id != weekly?.questId &&
+        definitions.none { d -> d.questId == it.id && d.kind == "WEEKLY" } }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -97,6 +103,23 @@ fun GroupDetailScreen(
             }
 
             item {
+                OutlinedButton(onClick = onGetQuest, enabled = challengeState?.busy != true && challengeState?.loading != true,
+                    modifier = Modifier.fillMaxWidth()) { Text("Get quest") }
+                challengeState?.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
+            weekly?.let { goal -> item {
+                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Weekly group goal", style = MaterialTheme.typography.titleSmall)
+                    Text(allQuests.find { it.id == goal.questId }?.title.orEmpty(), style = MaterialTheme.typography.titleLarge)
+                    val value = challengeState?.snapshot?.progress?.get(goal.questId) ?: 0.0
+                    Text(no.ntnu.prog2007.questbook.ui.personal.metricProgressText(
+                        no.ntnu.prog2007.questbook.data.personal.ActivityMetric.valueOf(goal.metric), value, goal.target))
+                    LinearProgressIndicator(progress = { (value / goal.target).toFloat().coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
+                    TextButton(onClick = { onQuestClick(goal.questId) }) { Text("View group goal") }
+                } }
+            } }
+            item {
                 Text(
                     "Group quests",
                     style = MaterialTheme.typography.titleSmall
@@ -110,7 +133,9 @@ fun GroupDetailScreen(
             }
 
             items(groupQuests, key = { it.id }) { quest ->
-                QuestCard(quest) {
+                val mine = challengeState?.snapshot?.attempts?.find { it.challengeId == quest.id && it.userId == challengeState.userId }
+                val completed = challengeState?.snapshot?.results?.any { it.questId == mine?.attemptId } == true
+                QuestCard(if (completed) quest.copy(status = no.ntnu.prog2007.questbook.model.QuestStatus.COMPLETED) else quest) {
                     onQuestClick(quest.id)
                 }
             }

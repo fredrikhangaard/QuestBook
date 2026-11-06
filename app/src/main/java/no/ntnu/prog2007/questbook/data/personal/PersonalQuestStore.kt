@@ -20,7 +20,7 @@ class PersonalQuestStore(private val db: QuestBookDatabase, private val random: 
         var assignments = dao.getAssignments(uid)
         suspend fun assign(template: QuestTemplate, cadence: QuestCadence, window: QuestWindow, slot: String) {
             if (assignments.any { it.cadence == cadence.name && it.periodKey == window.key && it.slot == slot }) return
-            val id = "personal-" + UUID.nameUUIDFromBytes("$uid|${cadence.name}|${window.key}|$slot".toByteArray(Charsets.UTF_8))
+            val id = "personal-" + UUID.nameUUIDFromBytes("$uid|v2|${cadence.name}|${window.key}|$slot".toByteArray(Charsets.UTF_8))
             val row = PersonalQuestEntity(id, uid, template.id, cadence.name, window.key, slot, template.title,
                 template.description, template.metric.name, template.target, window.start, window.end, window.zone)
             dao.insertAssignment(row)
@@ -53,8 +53,8 @@ class PersonalQuestStore(private val db: QuestBookDatabase, private val random: 
     private suspend fun reconcile(uid: String) {
         val results = db.trackingDao().getResults(uid)
         val events = questActivities(results, dao.getEntries(uid))
-        for (assignment in dao.getAssignments(uid).filter { it.completedAtMillis == null }) {
-            val eligible = if (assignment.cadence == "ACTIVITY") events.filter { it.questId == assignment.questId } else events
+        for (assignment in dao.getAssignments(uid).filter { it.completedAtMillis == null && it.cadence != "RETIRED" }) {
+            val eligible = if (assignment.cadence in listOf("ACTIVITY", "ATTEMPT")) events.filter { it.questId == assignment.questId } else events
             val at = reachedAt(assignment, eligible) ?: continue
             // Do not invalidate a retained GPS writer; finish that saved activity first.
             if (db.trackingDao().getSession(assignment.questId) != null) continue
@@ -66,7 +66,7 @@ class PersonalQuestStore(private val db: QuestBookDatabase, private val random: 
                 db.trackingDao().insertResult(QuestResultEntity("award-${assignment.questId}", assignment.questId,
                     quest.groupId, uid, assignment.title, "You", at,
                     if (assignment.cadence != "WEEKLY") manualTime else 0,
-                    if (assignment.cadence == "ACTIVITY" && ownDistance > 0) ownDistance else null, null))
+                    if (assignment.cadence in listOf("ACTIVITY", "ATTEMPT") && ownDistance > 0) ownDistance else null, null))
             }
             db.questDao().updateQuest(quest.copy(status = QuestStatus.COMPLETED.name))
             dao.updateAssignment(assignment.copy(completedAtMillis = at))
@@ -93,9 +93,11 @@ class PersonalQuestStore(private val db: QuestBookDatabase, private val random: 
         val events = questActivities(results, dao.getEntries(uid))
         val resultIds = results.map { it.questId }.toSet()
         val sessions = db.trackingDao().getSessions(uid).map { it.questId }.toSet()
-        return PersonalQuestSnapshot(dao.getAssignments(uid).map { row -> PersonalQuestProgress(row,
-            activityProgress(ActivityMetric.valueOf(row.metric), if (row.cadence == "ACTIVITY") events.filter { it.questId == row.questId } else events, row.periodStartMillis,
-                row.periodEndMillis, ZoneId.of(row.zoneId)), row.questId in resultIds, row.questId in sessions) })
+        val assignments = dao.getAssignments(uid)
+        return PersonalQuestSnapshot(assignments.map { row -> PersonalQuestProgress(row,
+            activityProgress(ActivityMetric.valueOf(row.metric), if (row.cadence in listOf("ACTIVITY", "ATTEMPT")) events.filter { it.questId == row.questId } else events, row.periodStartMillis,
+                row.periodEndMillis, ZoneId.of(row.zoneId)), row.questId in resultIds, row.questId in sessions || assignments.any { pending ->
+                    pending.templateId == "bounded:${row.questId}" && pending.completedAtMillis == null && pending.questId !in resultIds }) })
     }
 
     /** Idempotency key prevents a double tap/retry from adding the same manual submission twice. */
@@ -107,19 +109,22 @@ class PersonalQuestStore(private val db: QuestBookDatabase, private val random: 
             check(it.userId == uid && it.questId == questId)
             return@withTransaction
         }
-        check(row.cadence != "WEEKLY" && now >= row.periodStartMillis && now < row.periodEndMillis) { "This daily quest has expired." }
+        check(now >= row.periodStartMillis && now < row.periodEndMillis) { "This daily quest has expired." }
         check(row.completedAtMillis == null) { "This daily quest is already complete." }
         check(db.trackingDao().getSession(questId) == null) { "Finish your saved GPS activity before adding manual progress." }
         require(quantity.isFinite() && quantity > 0 && minutes.isFinite() && minutes in 0.0..1440.0) { "Enter a valid amount and active time." }
         val metric = ActivityMetric.valueOf(row.metric)
+        require(metric !in listOf(ActivityMetric.WALK_METERS, ActivityMetric.ACTIVE_DAYS, ActivityMetric.ACTIVE_MINUTES)) {
+            "Start the walking quest with GPS. Active days update automatically."
+        }
         val allEvents = questActivities(db.trackingDao().getResults(uid), dao.getEntries(uid))
-        val events = if (row.cadence == "ACTIVITY") allEvents.filter { it.questId == questId } else allEvents
+        val events = if (row.cadence in listOf("ACTIVITY", "ATTEMPT")) allEvents.filter { it.questId == questId } else allEvents
         val remaining = (row.target - activityProgress(metric, events, row.periodStartMillis, row.periodEndMillis, ZoneId.of(row.zoneId))).coerceAtLeast(0.0)
         val amount = if (metric == ActivityMetric.WALK_METERS) quantity * 1000 else quantity
         require(amount <= remaining + 0.000001) { "Enter no more than the remaining target." }
-        if (metric in listOf(ActivityMetric.PUSHUPS, ActivityMetric.SQUATS))
+        if (metric in listOf(ActivityMetric.PUSHUPS, ActivityMetric.SQUATS, ActivityMetric.BODYWEIGHT_REPS))
             require(amount % 1.0 == 0.0) { "Repetitions must be a whole number." }
-        if (metric in listOf(ActivityMetric.WATER_VISITS, ActivityMetric.PARK_VISITS)) require(amount == 1.0)
+        if (metric in listOf(ActivityMetric.WATER_VISITS, ActivityMetric.PARK_VISITS, ActivityMetric.OUTDOOR_VISITS, ActivityMetric.CONFIRMATIONS)) require(amount == 1.0)
         val activeMillis = ((if (metric == ActivityMetric.ACTIVE_MINUTES) quantity else minutes) * 60000).toLong()
         if (metric == ActivityMetric.ACTIVE_MINUTES) require(activeMillis > 0) { "Enter an active duration of at least one millisecond." }
         dao.insertEntry(ActivityEntryEntity(operationId, uid, questId, now,
@@ -127,7 +132,7 @@ class PersonalQuestStore(private val db: QuestBookDatabase, private val random: 
             activeMillis = activeMillis,
             pushups = if (metric == ActivityMetric.PUSHUPS) amount.toInt() else 0,
             squats = if (metric == ActivityMetric.SQUATS) amount.toInt() else 0,
-            visitKind = when (metric) { ActivityMetric.WATER_VISITS -> "WATER"; ActivityMetric.PARK_VISITS -> "PARK"; else -> null }))
+            visitKind = when (metric) { ActivityMetric.WATER_VISITS -> "WATER"; ActivityMetric.PARK_VISITS -> "PARK"; ActivityMetric.OUTDOOR_VISITS -> "OUTDOOR"; ActivityMetric.CONFIRMATIONS -> "CONFIRMED"; else -> null }, bodyweightReps = if (metric == ActivityMetric.BODYWEIGHT_REPS) amount.toInt() else 0))
         reconcile(uid)
     }
 
@@ -138,23 +143,35 @@ class PersonalQuestStore(private val db: QuestBookDatabase, private val random: 
         if (db.trackingDao().getSession(questId) != null) return@withTransaction // An expired activity can still be saved.
         check(row.completedAtMillis == null && now >= row.periodStartMillis && now < row.periodEndMillis) { "This daily quest is no longer active." }
         val allEvents = questActivities(db.trackingDao().getResults(uid), dao.getEntries(uid))
-        val events = if (row.cadence == "ACTIVITY") allEvents.filter { it.questId == questId } else allEvents
+        val events = if (row.cadence in listOf("ACTIVITY", "ATTEMPT")) allEvents.filter { it.questId == questId } else allEvents
         val remaining = row.target - activityProgress(ActivityMetric.WALK_METERS, events, row.periodStartMillis, row.periodEndMillis, ZoneId.of(row.zoneId))
         check(remaining > 0) { "This goal has already been reached. Refresh the quest." }
         val quest = checkNotNull(db.questDao().getQuest(questId))
         db.questDao().updateQuest(quest.copy(requiredDistanceKm = remaining / 1000))
     }
+    /** Reuse a goal's unfinished bounded walk, including a paused checkpoint. Back never loses Resume. */
+    suspend fun boundedWalk(uid: String, goalId: String, remaining: Double, now: Long, zone: ZoneId): String = db.withTransaction {
+        val results = db.trackingDao().getResults(uid).map { it.questId }.toSet()
+        dao.getAssignments(uid).firstOrNull { it.templateId == "bounded:$goalId" && it.completedAtMillis == null && it.questId !in results }
+            ?.let { return@withTransaction it.questId }
+        require(remaining.isFinite() && remaining > 0)
+        val id = createActivity(uid, ActivityMetric.WALK_METERS, minOf(5000.0, remaining) / 1000, 0.0,
+            UUID.randomUUID().toString(), true, now, zone)
+        dao.updateAssignment(checkNotNull(dao.getAssignment(id)).copy(templateId = "bounded:$goalId"))
+        id
+    }
+
     /** Extra activities make all weekly goals reachable without joining a group or rerolling a daily. */
     suspend fun createActivity(uid: String, metric: ActivityMetric, quantity: Double, minutes: Double,
         operationId: String, gps: Boolean, now: Long, zone: ZoneId): String = db.withTransaction {
         require(uid.isNotBlank())
         require(metric in listOf(ActivityMetric.WALK_METERS, ActivityMetric.PUSHUPS, ActivityMetric.SQUATS,
-            ActivityMetric.ACTIVE_MINUTES, ActivityMetric.WATER_VISITS, ActivityMetric.PARK_VISITS))
+            ActivityMetric.ACTIVE_MINUTES, ActivityMetric.WATER_VISITS, ActivityMetric.PARK_VISITS, ActivityMetric.BODYWEIGHT_REPS, ActivityMetric.OUTDOOR_VISITS))
         require(quantity.isFinite() && quantity > 0 && minutes.isFinite() && minutes in 0.0..1440.0)
         val amount = if (metric == ActivityMetric.WALK_METERS) quantity * 1000 else quantity
         require(amount <= when (metric) { ActivityMetric.WALK_METERS -> 100000.0; ActivityMetric.ACTIVE_MINUTES -> 1440.0; else -> 1000.0 })
         if (metric == ActivityMetric.ACTIVE_MINUTES) require(quantity >= 1)
-        if (metric in listOf(ActivityMetric.PUSHUPS, ActivityMetric.SQUATS)) require(quantity % 1.0 == 0.0)
+        if (metric in listOf(ActivityMetric.PUSHUPS, ActivityMetric.SQUATS, ActivityMetric.BODYWEIGHT_REPS)) require(quantity % 1.0 == 0.0)
         if (metric in listOf(ActivityMetric.WATER_VISITS, ActivityMetric.PARK_VISITS)) require(quantity == 1.0)
         require(!gps || metric == ActivityMetric.WALK_METERS)
         val id = "personal-" + UUID.nameUUIDFromBytes("$uid|activity|$operationId".toByteArray(Charsets.UTF_8))
@@ -163,6 +180,7 @@ class PersonalQuestStore(private val db: QuestBookDatabase, private val random: 
             ActivityMetric.WALK_METERS -> "Walk $quantity km"
             ActivityMetric.PUSHUPS -> "${quantity.toInt()} push-ups"
             ActivityMetric.SQUATS -> "${quantity.toInt()} squats"
+            ActivityMetric.BODYWEIGHT_REPS -> "${quantity.toInt()} bodyweight reps"
             ActivityMetric.ACTIVE_MINUTES -> "${quantity.toInt()} active minutes"
             ActivityMetric.WATER_VISITS -> "Visit a body of water"
             else -> "Visit a park or green space"

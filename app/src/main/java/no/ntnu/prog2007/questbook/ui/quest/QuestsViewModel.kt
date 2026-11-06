@@ -11,6 +11,6 @@ class QuestsViewModel(
 ) : ViewModel() {
     // Personal assignments have their own account-scoped section, never the shared group list.
     val quests = repository.quests.map { list -> list.filterNot {
-        no.ntnu.prog2007.questbook.data.personal.PersonalQuestIds.isPersonalGroup(it.groupId)
+        no.ntnu.prog2007.questbook.data.personal.PersonalQuestIds.isPersonalGroup(it.groupId) || it.id.startsWith("attempt-")
     } }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 }

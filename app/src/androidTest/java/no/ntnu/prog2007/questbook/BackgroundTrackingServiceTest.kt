@@ -208,16 +208,27 @@ class BackgroundTrackingServiceTest {
                 if (node.text?.toString() == "Pause tracking") return true
                 return (0 until node.childCount).any { showsPause(node.getChild(it)) }
             }
-            eventually("Notification tap should open the actively tracking quest") {
-                showsPause(instrumentation.uiAutomation.rootInActiveWindow)
+            fun revealPause(): Boolean {
+                val root = instrumentation.uiAutomation.rootInActiveWindow
+                if (showsPause(root)) return true
+                fun scroll(node: android.view.accessibility.AccessibilityNodeInfo?): Boolean {
+                    if (node == null) return false
+                    if (node.isScrollable && node.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)) return true
+                    return (0 until node.childCount).any { scroll(node.getChild(it)) }
+                }
+                // A smaller test display may place the button below the fold; opening the right
+                // quest must remain verifiable without assuming a particular screen height.
+                scroll(root)
+                return false
             }
+            eventually("Notification tap should open the actively tracking quest") { revealPause() }
             // Also close the entire app UI and reopen it through the same ongoing notification.
             activity.close()
             scenarioClosed = true
             assertTrue(tracking.gpsState.value.isTracking)
             notification()!!.contentIntent.send()
             eventually("Notification should reopen the walk after all app screens were closed") {
-                showsPause(instrumentation.uiAutomation.rootInActiveWindow)
+                revealPause()
             }
             eventually { tracking.gpsState.value.elapsedMillis >= 1000 }
             assertEquals(session, tracking.gpsState.value.sessionId)

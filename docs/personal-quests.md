@@ -1,35 +1,39 @@
 # Solo daily and weekly quests
 
-Every signed-in user receives one daily quest and five weekly goals, even without a group. Home and Quests show personal challenges separately from group quests. **Log personal activity** lets a solo user keep progressing after today's daily is complete or when it covers a different activity.
+Every signed-in user receives one daily quest and four weekly goals, even without a group. Home and Quests show active personal challenges separately from group challenges; completed quests appear below the active section on Quests.
 
 ## Pool and calendar rules
 
-The first version contains 14 daily templates: 2/3/5 km walks, 10/20/30 push-ups, 20/30/40 squats, 5/10/20 active minutes, a water visit, and a park/green-space visit. A new draw avoids the last daily template. The five weekly families are walking distance (15/20/25 km), active time (90/120/150 minutes), bodyweight repetitions (100/150/200), outdoor visits (2/3/4), and active days (3/4/5).
+The adventure pool contains 122 daily templates: playful 1/2/3/5 km discovery walks, push-up/squat/generic bodyweight sets, and water/park visits. The prompt adds variety while the measurable requirement stays within the existing tracking systems. Finding an object, having company and adding a photo are optional. The 154-template group-draw pool also includes social walking prompts. A daily draw avoids the last daily's exact template.
 
-Assignments and target snapshots are persisted before they appear. Reopening or refreshing does not reroll them. Daily windows end at local midnight; weekly windows run Monday to Monday. Local calendar midnights handle daylight-saving changes. An assignment retains its own timezone/window. New periods are generated when the app is running/opened; the app does not backfill missed days or send scheduled notifications.
+Four weekly families remain: walking distance (15/20/25 km), bodyweight repetitions (100/150/200), outdoor visits (2/3/4), and active days (3/4/5). Active-minute quests are no longer generated or shown as current goals; existing time-quest history and recorded GPS duration are retained.
 
-## Activities and contributions
+Assignments and targets are saved before they appear. Reopening does not reroll them. Daily windows end at local midnight; weekly windows run Monday to Monday. Local midnights handle DST, and each assignment retains its timezone/window. New periods are generated when the app is running/opened; missed days are not backfilled and there are no scheduled notifications.
 
-- Saved GPS results contribute their actual distance and active duration. Existing group GPS results count too.
-- Manual walking, push-ups, squats, active minutes, and visits are explicitly self-reported. Repetitions can be logged in smaller sets. Optional active minutes can accompany other manual activities. Decimal commas and decimal points are accepted by the form.
-- A water/park visit requires the user's confirmation, not photo recognition or automatic water detection. Photos are optional and can be added after completion using the existing local photo flow.
-- One activity can advance several compatible goals: a 5 km/60 minute walk adds 5 km, 60 active minutes, and one active day. Thirty push-ups add 30 bodyweight repetitions and an active day, but no distance. Several activities on the same calendar date still produce only one active day.
-- Physical activities are counted once. GPS activities come from immutable GPS results; manual activities come from activity_entries. Synthetic daily/weekly completion results do not create another physical activity, so achievements cannot recursively add progress or inflate distance/time.
-- Manual submissions use an idempotency key and transactions. Retrying the same submission does not add the activity twice. Do not manually log an activity already saved with GPS: the app cannot detect duplicate real-world activities reported as separate submissions.
-- Personal walking quests reuse precise-location permission, foreground pause/resume, sequential checkpoints, and saved route sections. If other saved activity already advanced a daily walk, a newly started GPS session targets the remaining distance. Manual entry is blocked while that quest has a saved GPS session. A retained GPS session is finalized through Finish before a daily award is finalized, so an automatic goal award cannot invalidate its pending GPS writer.
+## Recording activity from a quest
 
-Progress is credited when an activity is saved, using its completion/log timestamp. Unfinished GPS sessions do not yet contribute to other goals. An activity spanning midnight/Monday is credited to the period in which it is saved; it is not split retrospectively across calendar boundaries. An already-started GPS activity can still be resumed and saved after daily expiry, but cannot earn the expired daily award. Its actual result/route are retained and contribute to the new period. Extra personal activities have no daily deadline.
+- Walking has Start quest, Pause and Resume, with precise-location permission requested only after Start. There is no unrestricted activity selector and no new manual distance entry. Earlier manually recorded walks remain valid historical data.
+- Daily/open/drawn walking attempts use their own finite target and automatically stop GPS when it is reached. Pausing before the target keeps the same session and route for Resume. Finish saves the physical result once.
+- Weekly walking buttons start a bounded session of at most 5 km, or the smaller remaining target. Its source-goal link keeps an unfinished walk resumable after returning to the weekly page, including after app restart. A new bounded walk is created only after the previous one has been saved.
+- Repetition quests have +1/+5/+10, a typed-number field and Save. Buttons edit the unsaved set; only Save writes it. Specific push-ups/squats contribute to bodyweight totals. Generic bodyweight input does not pretend to be a specific exercise.
+- Visit quests require explicit confirmation, not image recognition or automatic location classification. A generic outdoor visit does not pretend to be a water/park-specific visit. Custom task confirmations do not become outdoor visits.
+- Active days are derived automatically from saved activity on distinct calendar dates. There is no direct edit to an active-day counter.
+- Every completed quest can have optional photos through the existing result-linked photo flow. A photo is never required to complete a task.
 
-## Weekly activity summary
+## Contributions and duplicate prevention
 
-Memories includes a current-week summary and previous/next week controls (no future weeks). It shows completed quests, distance, active time, active days, bodyweight repetitions, outdoor visits, and completed weekly goals. Weekly goal awards are reported separately from completed activity/daily quests. The feed follows the selected week. Totals include both GPS and self-reported activity and are personal, local-device totals.
+One physical event can advance the daily goal, personal weeklies and eligible group weeklies, while adding its distance/repetitions/time once to the user's activity summary. GPS events come from immutable saved GPS results; manual events come from activity_entries. Daily/weekly/group awards do not produce new physical events. Manual submission IDs and transactions make retrying the same operation idempotent.
 
-## Storage and integration boundaries
+Progress is credited when a physical activity is saved, using its completion/log timestamp. Unfinished GPS checkpoints do not yet contribute to other goals. A walk spanning midnight/Monday is credited to the period when it is saved, not retrospectively split. An already-started session may still be resumed and saved after expiry, but earns no expired daily award. The physical result/route remain. See `group-quest-adventures.md` for conservative membership eligibility and shared attempts.
 
-Room version 6 adds personal_quests (stable owner-scoped assignments) and activity_entries (self-reported activity). Existing quests, sessions, results, photos, and route sections are preserved. The existing quests table holds the corresponding assigned personal quest so GPS and result/photo navigation can be reused; personal rows are excluded from group quest lists. Readers and write operations check the owning user ID. Personal group IDs are local identifiers, not real shared groups.
+The GPS service, sequential writer, failure retry, resume anchors and completion barrier are unchanged. A pending session must be finished before its own automatic daily award can finalize, preventing an award from invalidating pending GPS writes.
 
-Everything remains local per signed-in account. The draw/progress history does not yet synchronize between devices. Device time is not a trusted anti-cheat clock. Firestore rules and deployment are untouched: personal assignments, manual events, goal award results, ownership, idempotency, and shared period/timezone policy need an explicit cloud contract with the teammate implementing synchronization. The earlier proposed group-only rules are not a drop-in contract for personal quests.
+## Summary and storage
+
+Memories shows personal weekly totals and a dated completion feed, with previous/next week controls. Shared group completion/photo cards are included when present on this device, while precise routes remain owner-only. Other members' activity never inflates the current user's summary. Weekly achievements are counted separately from completed activity/daily quests.
+
+Room version 7 preserves all earlier data and archives active-minute assignments. The new generic repetition field distinguishes unspecified bodyweight work from push-ups/squats. Personal identifiers are local owner scopes, not Firestore groups. Draws, progress, attempts, results and photos still need the teammate's cloud synchronization contract before they appear across phones. Device time is not a trusted anti-cheat clock.
 
 ## Validation
 
-JVM tests cover calendar/DST boundaries, exact contribution units, active-day deduplication, pool coverage, and physical-activity/award separation. Room tests cover stable assignment persistence and concurrent refreshes, rollover, per-account data, daily-to-weekly GPS credit, incremental manual sets and retry, visits without photos, manual+GPS remaining targets, extra activities, validation failures, and upgrades from previous database versions. A production MainActivity navigation test uses a fake signed-in solo account with no groups to complete a visit without a photo, save a workout, inspect the weekly summary, and open an assigned GPS activity.
+Unit tests cover calendar/DST boundaries, real units, distinct active days, pool coverage, membership projection and physical-event/award separation. Room tests cover persistence, rollover, concurrent refresh, owner checks, direct weekly sets, bounded walk resume, legacy manual distance, independent group attempts and schema upgrades. Real-screen tests cover optional-photo visit completion, repetition buttons/typed input, summary browsing and explicitly starting/pausing GPS from a weekly quest.

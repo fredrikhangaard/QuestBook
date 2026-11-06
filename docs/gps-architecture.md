@@ -1,5 +1,7 @@
 # How quest assignment and GPS tracking fit together
 
+New group quests use shared definitions and owned member attempts; start with [group quest adventures](group-quest-adventures.md) for that model. The assignment-picker flow below describes the preserved legacy assigned-quest path. Every GPS session, including open/drawn challenges, still operates on an assigned owned quest row.
+
 Start with the flow below, then use the file table to find the code responsible for each step. The UI, GPS filtering, and database responsibilities are deliberately separated.
 
 ## Reading order

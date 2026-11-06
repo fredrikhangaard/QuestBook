@@ -20,10 +20,11 @@ fun CreateQuestScreen(
     groupId: String,
     groupName: String,
     onBack: () -> Unit,
-    onCreated: () -> Unit
+    onCreated: () -> Unit,
+    saveQuest: (suspend (no.ntnu.prog2007.questbook.model.Quest, Double) -> Unit)? = null
 ) {
     val factory = remember(groupId) {
-        CreateQuestViewModel.Factory(groupId)
+        CreateQuestViewModel.Factory(groupId, saveQuest)
     }
     val questViewModel: CreateQuestViewModel = viewModel(
         key = "createQuest_$groupId",
@@ -113,13 +114,13 @@ fun CreateQuestScreen(
             modifier = Modifier.fillMaxWidth()
         )
 
-        if (state.type == QuestType.DISTANCE) {
+        if (state.type in listOf(QuestType.DISTANCE, QuestType.WORKOUT)) {
             OutlinedTextField(
                 value = state.distanceKm,
                 onValueChange = questViewModel::onDistanceChange,
                 enabled = editable,
-                label = { Text("Target distance") },
-                suffix = { Text("km") },
+                label = { Text(if (state.type == QuestType.DISTANCE) "Target distance" else "Target repetitions") },
+                suffix = { Text(if (state.type == QuestType.DISTANCE) "km" else "reps") },
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Decimal
                 ),
@@ -133,7 +134,7 @@ fun CreateQuestScreen(
         }
 
         Text(
-            "This quest will be added to $groupName without an assigned member.",
+            "Everyone in $groupName can complete this quest independently. Photos are optional.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

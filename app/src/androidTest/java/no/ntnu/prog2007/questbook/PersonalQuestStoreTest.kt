@@ -37,19 +37,19 @@ class PersonalQuestStoreTest {
         try {
             val initial = PersonalQuestStore(db, Random(1)).refresh("me", now, zone).quests
             assertEquals(1, initial.count { it.assignment.cadence == "DAILY" })
-            assertEquals(5, initial.count { it.assignment.cadence == "WEEKLY" })
+            assertEquals(4, initial.count { it.assignment.cadence == "WEEKLY" })
             db.close()
             db = Room.databaseBuilder(context, QuestBookDatabase::class.java, name).build()
             val store = PersonalQuestStore(db, Random(99))
             assertEquals(initial, store.refresh("me", now, zone).quests)
             coroutineScope { List(3) { async { store.refresh("me", now, zone) } }.awaitAll() }
-            assertEquals(6, db.personalQuestDao().getAssignments("me").size)
+            assertEquals(5, db.personalQuestDao().getAssignments("me").size)
             val tomorrow = store.refresh("me", now + 86400000L, zone).quests
-            assertEquals(7, tomorrow.size)
+            assertEquals(6, tomorrow.size)
             val dailyRows = tomorrow.filter { it.assignment.cadence == "DAILY" }
             assertNotEquals(dailyRows[0].assignment.templateId, dailyRows[1].assignment.templateId)
             val nextWeek = store.refresh("me", now + 7 * 86400000L, zone).quests
-            assertEquals(10, nextWeek.count { it.assignment.cadence == "WEEKLY" })
+            assertEquals(8, nextWeek.count { it.assignment.cadence == "WEEKLY" })
             assertTrue(store.refresh("other", now, zone).quests.all { it.assignment.userId == "other" })
         } finally { db.close(); context.deleteDatabase(name) }
     }
@@ -93,13 +93,16 @@ class PersonalQuestStoreTest {
             assertEquals("WATER", db.personalQuestDao().getEntries("me").single { it.id == "visit" }.visitKind)
         } finally { db.close() }
     }
-    @Test fun partialManualDistanceAndGpsTogetherCompleteDailyAndWeekly() = runBlocking {
+    @Test fun legacyManualDistanceIsPreservedWhileNewWalksRequireGps() = runBlocking {
         val db = database()
         try {
             val row = daily(db, ActivityMetric.WALK_METERS, 5000.0)
             val store = PersonalQuestStore(db)
             store.refresh("me", now, zone)
-            store.logManual("me", row.questId, 2.0, 20.0, "manual-walk", now)
+            try { store.logManual("me", row.questId, 2.0, 20.0, "new-manual-walk", now); fail("Walking now requires GPS") }
+            catch (_: IllegalArgumentException) {}
+            // Existing manually saved distance survives the redesign and still contributes once.
+            db.personalQuestDao().insertEntry(ActivityEntryEntity("legacy-walk", "me", row.questId, now, distanceMeters = 2000.0, activeMillis = 1200000))
             store.prepareGps("me", row.questId, now)
             assertEquals(3.0, db.questDao().getQuest(row.questId)!!.requiredDistanceKm!!, 0.0)
             val gps = RoomQuestTrackingStore(db)
@@ -125,7 +128,7 @@ class PersonalQuestStoreTest {
             denied { store.logManual("me", row.questId, Double.NaN, 0.0, "c", now) }
             denied { store.logManual("me", row.questId, 1.5, 0.0, "d", now) }
             denied { store.logManual("me", row.questId, 10.0, 0.0, "e", row.periodEndMillis) }
-            denied { store.logManual("me", state.quests.first { it.assignment.cadence == "WEEKLY" }.assignment.questId, 1.0, 0.0, "f", now) }
+            denied { store.logManual("me", state.quests.first { it.assignment.cadence == "WEEKLY" && it.assignment.metric == "WALK_METERS" }.assignment.questId, 1.0, 0.0, "f", now) }
             assertTrue(db.personalQuestDao().getEntries("me").isEmpty())
         } finally { db.close() }
     }
@@ -143,7 +146,7 @@ class PersonalQuestStoreTest {
             val current = store.refresh("me", now, zone)
             assertTrue(current.quests.single { it.assignment.slot == "BODYWEIGHT_REPS" }.complete)
             assertEquals(1, current.quests.count { it.assignment.cadence == "ACTIVITY" })
-            assertEquals(5, current.quests.count { it.assignment.cadence == "WEEKLY" })
+            assertEquals(4, current.quests.count { it.assignment.cadence == "WEEKLY" })
             assertEquals(1, current.quests.count { it.assignment.cadence == "DAILY" })
         } finally { db.close() }
     }

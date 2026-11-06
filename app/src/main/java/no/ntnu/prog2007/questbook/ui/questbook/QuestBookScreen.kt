@@ -25,17 +25,27 @@ import java.util.Locale
 
 /** Memories replaces the sample totals with durable, account-scoped completion history. */
 @Composable
-fun QuestBookScreen(onQuestClick: (String) -> Unit = {}, onRouteClick: ((String) -> Unit)? = null) {
+fun QuestBookScreen(onQuestClick: (String) -> Unit = {}, onRouteClick: ((String) -> Unit)? = null,
+    shared: no.ntnu.prog2007.questbook.ui.challenges.GroupChallengesUiState? = null) {
     val context = LocalContext.current
     val model: MemoriesViewModel = viewModel(factory = remember { MemoriesViewModel.Factory(context) })
     val state by model.state.collectAsStateWithLifecycle()
-    MemoriesContent(state, onRouteClick = onRouteClick, onPreviousWeek = model::previousWeek, onNextWeek = model::nextWeek, onQuestClick = onQuestClick)
+    // A member's shared completion card is visible, but their private route remains owner-only.
+    val uid = no.ntnu.prog2007.questbook.data.AppServices.authRepository.currentUserId
+    val accessibleShared = shared?.takeIf { it.userId == uid }
+    val sharedResults = accessibleShared?.snapshot?.results.orEmpty().filter { result ->
+        result.userId != uid && state.summary?.let { result.completedAtMillis in it.start until it.end } == true
+    }.map { it.copy(participantName = shared?.names?.get(it.userId) ?: it.participantName) }
+    val combined = state.copy(results = (state.results + sharedResults).distinctBy { it.id }.sortedByDescending { it.completedAtMillis },
+        photos = (state.photos + accessibleShared?.snapshot?.photos.orEmpty()).distinctBy { it.id })
+    MemoriesContent(combined, canViewRoute = { it.userId == uid }, onRouteClick = onRouteClick, onPreviousWeek = model::previousWeek, onNextWeek = model::nextWeek, onQuestClick = onQuestClick)
 }
 
 /** Stateless rendering allows previews and flow tests to use isolated data instead of real accounts. */
 @Composable
 fun MemoriesContent(state: MemoriesUiState, onRouteClick: ((String) -> Unit)? = null,
-    onPreviousWeek: () -> Unit = {}, onNextWeek: () -> Unit = {}, onQuestClick: (String) -> Unit = {}) {
+    onPreviousWeek: () -> Unit = {}, onNextWeek: () -> Unit = {},
+    canViewRoute: (no.ntnu.prog2007.questbook.data.tracking.QuestResultEntity) -> Boolean = { true }, onQuestClick: (String) -> Unit = {}) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
@@ -72,7 +82,7 @@ fun MemoriesContent(state: MemoriesUiState, onRouteClick: ((String) -> Unit)? = 
                             modifier = Modifier.fillMaxWidth().height(200.dp), contentScale = ContentScale.Crop) }
                         if (photo.caption.isNotBlank()) Text(photo.caption)
                     }
-                    if (result.gpsSessionId != null && onRouteClick != null) {
+                    if (result.gpsSessionId != null && onRouteClick != null && canViewRoute(result)) {
                         OutlinedButton(onClick = { onRouteClick(result.questId) }) { Text("View route") }
                     }
                     TextButton(onClick = { onQuestClick(result.questId) }) { Text("View quest") }
