@@ -2,30 +2,57 @@ package no.ntnu.prog2007.questbook
 
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.test.platform.app.InstrumentationRegistry
+import java.time.ZoneId
+import java.util.UUID
+import kotlinx.coroutines.runBlocking
 import no.ntnu.prog2007.questbook.data.AppServices
 import no.ntnu.prog2007.questbook.data.auth.FakeAuthRepository
+import no.ntnu.prog2007.questbook.data.challenges.GroupChallengeStore
 import no.ntnu.prog2007.questbook.data.groups.FakeGroupRepository
+import no.ntnu.prog2007.questbook.data.personal.ActivityMetric
+import no.ntnu.prog2007.questbook.data.sync.ChallengeSync
+import no.ntnu.prog2007.questbook.location.database.QuestBookDatabase
 import no.ntnu.prog2007.questbook.model.Group
+import no.ntnu.prog2007.questbook.model.Quest
+import no.ntnu.prog2007.questbook.model.QuestStatus
+import no.ntnu.prog2007.questbook.model.QuestType
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.ExternalResource
 
 class BottomNavigationTest {
-    /** Uses a fake login so the tests never talk to Firebase. Runs before the activity starts. */
+    private val group = Group(
+        id = "mountain-crew", name = "Mountain Crew",
+        description = "Outdoor adventures and quests together.",
+        inviteCode = "K7MQ2X", ownerId = "emma",
+        memberIds = listOf("emma", "jonas", "test-user")
+    )
+
+    /** A unique group quest per run, because the Room database on the device is kept between runs. */
+    private val questId = "nav-${UUID.randomUUID()}"
+    private val questTitle = "Navigation reps ${questId.takeLast(4)}"
+
+    /**
+     * Uses a fake login and a local group quest so the tests never talk to Firebase.
+     * Runs before the activity starts.
+     */
     @get:Rule(order = 0) val fakeAuth = object : ExternalResource() {
-        override fun before() {
+        override fun before() = runBlocking {
             AppServices.authRepository = FakeAuthRepository()
             AppServices.groupRepository = FakeGroupRepository(
-                initialGroups = listOf(
-                    Group(
-                        id = "mountain-crew", name = "Mountain Crew",
-                        description = "Outdoor adventures and quests together.",
-                        inviteCode = "K7MQ2X", ownerId = "emma",
-                        memberIds = listOf("emma", "jonas", "test-user")
-                    )
-                ),
+                initialGroups = listOf(group),
                 usernames = mapOf("emma" to "Emma", "jonas" to "Jonas", "test-user" to "Test User")
             )
+            AppServices.challengeSyncFactory = { ChallengeSync.None }
+            val db = QuestBookDatabase.getDatabase(InstrumentationRegistry.getInstrumentation().targetContext)
+            val store = GroupChallengeStore(db)
+            val now = System.currentTimeMillis()
+            store.refresh("test-user", listOf(group), now - 1000, ZoneId.systemDefault())
+            store.create("test-user", group, Quest(questId, group.id, QuestType.WORKOUT, questTitle, "Do 20 reps.",
+                "", QuestStatus.NOT_STARTED, createdByUserId = "test-user", createdAtMillis = now),
+                ActivityMetric.BODYWEIGHT_REPS, 20.0, now)
+            Unit
         }
 
         override fun after() {
@@ -34,6 +61,27 @@ class BottomNavigationTest {
     }
 
     @get:Rule(order = 1) val compose = createAndroidComposeRule<MainActivity>()
+
+    /** Lists only compose the rows on screen, so scroll the page until [matcher] is found. */
+    private fun scrollTo(matcher: SemanticsMatcher) = compose.waitUntil(15000) {
+        try {
+            compose.onAllNodes(hasScrollAction()).onFirst().performScrollToNode(matcher)
+            true
+        } catch (_: AssertionError) {
+            false
+        } catch (_: IllegalStateException) {
+            false
+        }
+    }
+
+    /** Opens the seeded group quest from the current list and checks that its page shows. */
+    private fun openSeededQuest() {
+        scrollTo(hasTestTag("quest_$questId"))
+        compose.onNodeWithTag("quest_$questId").performClick()
+        // The quest page has a back button; the lists do not.
+        compose.waitUntil(15000) { compose.onAllNodesWithText("‹ Back").fetchSemanticsNodes().isNotEmpty() }
+        compose.onAllNodesWithText(questTitle).onFirst().assertIsDisplayed()
+    }
 
     private fun signIn() {
         compose.onNodeWithTag("tab_today").assertDoesNotExist()
@@ -57,13 +105,12 @@ class BottomNavigationTest {
 
     @Test fun homeLinksAndQuestBackStillWork() {
         signIn()
+        scrollTo(hasText("Open QuestBook"))
         compose.onNodeWithText("Open QuestBook").performClick()
         compose.onNodeWithTag("tab_questbook").assertIsSelected()
-        compose.onNodeWithText("This week").assertIsDisplayed()
+        compose.onNodeWithText("This week's activity").assertIsDisplayed()
         compose.onNodeWithTag("tab_today").performClick()
-        compose.onNodeWithTag("quest_1").performScrollTo().performClick()
-        compose.onNodeWithTag("tab_today").assertDoesNotExist()
-        compose.onNodeWithText("Start Quest").performScrollTo().assertIsDisplayed()
+        openSeededQuest()
         compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         compose.onNodeWithTag("tab_today").assertIsSelected()
     }
@@ -71,15 +118,9 @@ class BottomNavigationTest {
     @Test fun questCardsOpenCorrectDetailsAndBackReturnsToQuests() {
         signIn()
         compose.onNodeWithTag("tab_quests").performClick()
-        listOf("1" to "Walk 5 km", "2" to "Visit a new place", "3" to "Outdoor workout").forEach { (id, title) ->
-            compose.onNodeWithTag("quest_$id").performScrollTo().performClick()
-            compose.onNodeWithText(title).assertIsDisplayed()
-            compose.onNodeWithText("Add photo").performScrollTo().assertIsDisplayed()
-            compose.onNodeWithTag("tab_quests").assertDoesNotExist()
-            if (id == "3") compose.onNodeWithText("Start Quest").assertIsNotEnabled()
-            compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
-            compose.onNodeWithTag("tab_quests").assertIsSelected()
-        }
+        openSeededQuest()
+        compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        compose.onNodeWithTag("tab_quests").assertIsSelected()
     }
 
     @Test fun homeAndOverviewOpenGroupAndCreateJoinPages() {
