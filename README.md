@@ -84,8 +84,7 @@ GPS drives a decision, not just a map. `GpsRepository` filters inaccurate sample
 
 ## UML
 
-- Class diagram (overview): [`docs/uml/class-diagram.png`](docs/uml/class-diagram.png)
-- Sequence diagram (GPS quest from start to finish): [`docs/uml/gps-quest-sequence.png`](docs/uml/gps-quest-sequence.png)
+The class diagram (overview of the presentation, data and domain layers) and the sequence diagram for a GPS quest from start to finish are in the final project report.
 
 ## Getting started
 
