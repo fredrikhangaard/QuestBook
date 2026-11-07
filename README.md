@@ -128,7 +128,7 @@ More test notes: [`docs/testing.md`](docs/testing.md) and [`docs/testing.md`](do
 
 ## Known limitations
 
-- Leaving or deleting a group is not available in the app yet.
+- Members can leave a group online. Ownership passes to another member. The last member closes the group.
 - Using the same account on two phones at the same time is not supported for group quests.
 - Activity done before a member's first sync does not count towards that week's group goal.
 - Personal quests are stored on the phone only.

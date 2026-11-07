@@ -64,7 +64,9 @@ Group subcollections contain `challenges`, `attempts`, `completions`, `activity`
 
 `firestore.rules` controls cloud access. Publishing and testing the deployed rules is separate from building the app. Verify cross-device behavior with real accounts before claiming release readiness.
 
-Current limitations include no group leave/delete UI, no supported simultaneous group quest use by one account on two phones, and no group credit before the member's first sync. Weekly membership snapshots do not establish historical Monday membership by themselves.
+Members can leave through a confirmed online transaction. Ownership passes to a remaining member. The last member closes the group and disables its invite code. Saved local results and cloud child history remain.
+
+Current limitations include no supported simultaneous group quest use by one account on two phones and no group credit before the member's first sync. Weekly membership snapshots do not establish historical Monday membership by themselves. Full leave/rejoin history sharing remains limited by the first-join cloud membership record.
 
 ## Database history
 
