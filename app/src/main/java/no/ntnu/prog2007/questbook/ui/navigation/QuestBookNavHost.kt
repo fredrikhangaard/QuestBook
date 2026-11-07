@@ -57,6 +57,7 @@ fun QuestBookNavHost(trackingRequest: Pair<String, String>? = null, onTrackingOp
     // One source supplies matching group summaries to Home, overview, and detail pages.
     val groupsViewModel: GroupsViewModel = viewModel()
     val groups by groupsViewModel.groups.collectAsStateWithLifecycle()
+    val leaveState by groupsViewModel.leaveState.collectAsStateWithLifecycle()
     // Observe quest changes too, so an asynchronously loaded quest gets its correct group in the picker.
     val quests by no.ntnu.prog2007.questbook.data.repository.QuestDependencies.questRepository.quests.collectAsStateWithLifecycle()
     val entry by navController.currentBackStackEntryAsState()
@@ -218,6 +219,9 @@ fun QuestBookNavHost(trackingRequest: Pair<String, String>? = null, onTrackingOp
                         )
                     },
                     onQuestClick = ::openQuest,
+                    leaveState = leaveState,
+                    onClearLeaveError = groupsViewModel::clearLeaveError,
+                    onLeaveGroup = { groupsViewModel.leave(groupId) { navController.popBackStack() } },
                     challengeState = challengeState,
                     onGetQuest = { challenges.draw(groupId) { id -> navController.navigate("challenge/${Uri.encode(id)}") } }
                 )

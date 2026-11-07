@@ -45,8 +45,26 @@ fun GroupDetailScreen(
     onCreateQuest: () -> Unit,
     onQuestClick: (String) -> Unit,
     challengeState: no.ntnu.prog2007.questbook.ui.challenges.GroupChallengesUiState? = null,
-    onGetQuest: () -> Unit = {}
+    onGetQuest: () -> Unit = {},
+    leaveState: LeaveGroupState = LeaveGroupState(),
+    onLeaveGroup: () -> Unit = {},
+    onClearLeaveError: () -> Unit = {}
 ) {
+    var confirmLeave by remember(group?.id) { mutableStateOf(false) }
+    if (confirmLeave && group != null) {
+        AlertDialog(onDismissRequest = { if (!leaveState.busy) confirmLeave = false },
+            title = { Text("Leave ${group.name}?") },
+            text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(if (group.memberIds.size == 1)
+                    "You are the last member. This closes the group and disables its invite code. Saved local results remain."
+                    else "You will lose access to this group's quests and shared photos. If you own the group, ownership passes to another member. Saved local results remain.")
+                leaveState.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            } },
+            confirmButton = { TextButton(onClick = onLeaveGroup, enabled = !leaveState.busy) {
+                Text(if (leaveState.busy) "Leaving…" else "Leave group")
+            } },
+            dismissButton = { TextButton(onClick = { confirmLeave = false }, enabled = !leaveState.busy) { Text("Cancel") } })
+    }
     val allQuests by QuestDependencies.questRepository.quests
         .collectAsStateWithLifecycle()
 
@@ -86,6 +104,11 @@ fun GroupDetailScreen(
             }
 
             item { GroupMembersSection(group) }
+            item {
+                TextButton(onClick = { onClearLeaveError(); confirmLeave = true }, enabled = !leaveState.busy) {
+                    Text("Leave group", color = MaterialTheme.colorScheme.error)
+                }
+            }
 
             if (group.inviteCode.isNotEmpty()) {
                 item { InviteCard(group.inviteCode) }

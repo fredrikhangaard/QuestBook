@@ -3,6 +3,10 @@ package no.ntnu.prog2007.questbook.ui.groups
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flatMapLatest
@@ -63,9 +67,33 @@ internal fun Group.toSummary(currentUserId: String, usernames: Map<String, Strin
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class GroupsViewModel(
-    authRepository: AuthRepository = AppServices.authRepository,
+    private val authRepository: AuthRepository = AppServices.authRepository,
     private val groupRepository: GroupRepository = AppServices.groupRepository
 ) : ViewModel() {
+
+    private val mutableLeaveState = MutableStateFlow(LeaveGroupState())
+    val leaveState = mutableLeaveState.asStateFlow()
+
+    /** Completion is reported only after the server accepts the membership change. */
+    fun leave(groupId: String, onLeft: () -> Unit) {
+        if (mutableLeaveState.value.busy) return
+        val uid = authRepository.currentUserId ?: return
+        mutableLeaveState.value = LeaveGroupState(busy = true)
+        viewModelScope.launch {
+            try {
+                groupRepository.leaveGroup(uid, groupId)
+                mutableLeaveState.value = LeaveGroupState()
+                if (authRepository.currentUserId == uid) onLeft()
+            } catch (cancelled: CancellationException) {
+                mutableLeaveState.value = LeaveGroupState()
+                throw cancelled
+            } catch (_: Exception) {
+                mutableLeaveState.value = LeaveGroupState(error = "Could not leave the group. Check your connection and try again.")
+            }
+        }
+    }
+
+    fun clearLeaveError() { if (!mutableLeaveState.value.busy) mutableLeaveState.value = LeaveGroupState() }
 
     /** The signed-in user's groups, sorted by name. Updates live when groups change. */
     val groups: StateFlow<List<GroupSummary>> = authRepository.currentUserIdFlow
@@ -83,3 +111,6 @@ class GroupsViewModel(
         return groups.map { it.toSummary(userId, usernames) }
     }
 }
+
+/** State for the confirmed online leave operation. */
+data class LeaveGroupState(val busy: Boolean = false, val error: String? = null)

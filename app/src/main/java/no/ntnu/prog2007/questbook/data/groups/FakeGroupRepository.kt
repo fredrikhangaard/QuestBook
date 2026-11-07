@@ -69,6 +69,18 @@ class FakeGroupRepository(
         return JoinOutcome.Success(group.id)
     }
 
+    override suspend fun leaveGroup(userId: String, groupId: String) {
+        val group = groups.value.firstOrNull { it.id == groupId }
+        check(group != null && userId in group.memberIds) { "You are no longer a member of this group." }
+        val remaining = group.memberIds.filterNot { it == userId }
+        groups.update { all -> all.mapNotNull {
+            if (it.id != groupId) it
+            else if (remaining.isEmpty()) null
+            else it.copy(memberIds = remaining,
+                ownerId = if (it.ownerId == userId) remaining.sorted().first() else it.ownerId)
+        } }
+    }
+
     override suspend fun getUsernames(userIds: List<String>): Map<String, String> =
         userIds.associateWith { usernames[it] ?: "Unknown" }
 }

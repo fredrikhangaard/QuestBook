@@ -131,6 +131,28 @@ class FirestoreGroupRepository(
             if (error.code == FirebaseFirestoreException.Code.PERMISSION_DENIED) false else throw error
         }
 
+    /** A transaction prevents a concurrent join or leave from losing another member's changes. */
+    override suspend fun leaveGroup(userId: String, groupId: String) {
+        require(userId.isNotBlank())
+        groups.document(groupId).let { reference ->
+            firestore.runTransaction { transaction ->
+                val snapshot = transaction.get(reference)
+                val members = (snapshot.get(FIELD_MEMBER_IDS) as? List<*>)?.filterIsInstance<String>().orEmpty()
+                check(userId in members) { "You are no longer a member of this group." }
+                val remaining = members.filterNot { it == userId }
+                if (remaining.isEmpty()) {
+                    // Child history is retained. Without the parent, member-only cloud reads are denied.
+                    transaction.delete(reference)
+                    snapshot.getString(FIELD_INVITE_CODE)?.let { transaction.delete(inviteCodes.document(it)) }
+                } else {
+                    val updates = mutableMapOf<String, Any>(FIELD_MEMBER_IDS to remaining)
+                    if (snapshot.getString(FIELD_OWNER_ID) == userId) updates[FIELD_OWNER_ID] = remaining.sorted().first()
+                    transaction.update(reference, updates)
+                }
+            }.await()
+        }
+    }
+
     override suspend fun getUsernames(userIds: List<String>): Map<String, String> {
         val missing = userIds.distinct().filterNot { usernameCache.containsKey(it) }
         // Firestore allows at most 30 ids in one "in" query.
