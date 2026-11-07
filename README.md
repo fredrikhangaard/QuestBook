@@ -1,137 +1,194 @@
 # QuestBook
 
-QuestBook is a private, social health and wellbeing app for small groups of friends. Members create and complete real-life quests together, such as walks, workouts and outdoor visits. GPS tracking decides when a distance quest is done, and completed quests, photos and weekly summaries build a shared history for the group.
+QuestBook is a social activity app for individuals and small groups of friends. Users complete walking, exercise and outdoor quests, then save results and optional photos in Memories.
 
-Made for PROG2007 Mobile Programming at NTNU, autumn 2026, by Jesper, Fredrik and Espen.
+Developed for PROG2007 Mobile Programming at NTNU, autumn 2026, by Jesper, Fredrik and Espen.
+
+**Repository:** https://github.com/fredrikhangaard/QuestBook
 
 ## Features
 
-- **Accounts:** sign up and log in with email and password (Firebase Authentication).
-- **Private groups:** create a group, join with a six-character invite code and see the members. A user can be in several groups.
-- **Group quests:**
-  - Open quests that every member can complete.
-  - Drawn quests that belong to the member who drew them.
-  - A weekly group goal that grows with the number of members.
-- **Personal quests:** daily and weekly solo quests with progress from your own activity.
-- **GPS tracking:** distance quests are tracked in a foreground service. The route is saved as it is walked, the quest can be paused and resumed, and tracking stops automatically when the distance target is reached.
-- **Results and photos:** finishing a quest saves a result. You can add a photo from the gallery, with an optional caption.
-- **Memories (QuestBook):** your completed quests, photos and weekly activity, week by week.
-- **Works offline:** quests, tracking and results are stored in Room. Group data is shared through Firestore when the phone is online.
+- **Accounts:** email and password registration and sign-in through Firebase Authentication.
+- **Private groups:** create groups, join using invite codes and view members.
+- **Leave group:** members can leave online. Ownership transfers to a remaining member. The last member closes the group and disables its invite code.
+- **Group quests:** create an open challenge for members to complete independently, or draw a quest assigned to yourself.
+- **Weekly group goal:** one automatic goal scaled to the stored member count. Its target remains fixed for that week.
+- **Personal quests:** one daily quest and four weekly goals covering walking, bodyweight repetitions, outdoor visits and active days.
+- **GPS tracking:** explicit Start, Pause and Resume controls. Tracking stops when the distance target is reached.
+- **Manual activity:** save repetition sets or confirm visits. Photos are optional.
+- **Memories:** browse completions, photos and personal activity totals by week.
+- **Saved routes:** view an offline drawing of a completed GPS route.
 
-## Core screens
+One saved activity can advance several matching goals without being counted twice in personal activity totals.
 
-| Screen | What it does |
+## Main screens
+
+| Screen | Purpose |
 |---|---|
-| **Today** (Home) | Your groups, personal quests and active group quests in one place |
-| **Quest** | Quest details, live GPS tracking, finishing and adding a photo |
-| **QuestBook** (Memories) | Weekly history, statistics and photos |
+| Home | Group shortcuts and active quests |
+| Groups | Memberships, group details and quest actions |
+| Quests | Personal and group goals, with completed history |
+| Quest details | Progress, activity controls and completion |
+| Memories | Weekly results, photos and statistics |
+| Profile | Account information and settings |
 
-Supporting screens: login and sign-up, Groups (create and join), group page, create quest, group quest page with member completions, saved route and profile.
+Supporting screens handle registration, sign-in, group creation, joining, quest creation, photos and saved routes.
 
 ## Architecture
 
-The app follows **MVVM with unidirectional data flow (UDF) and the Repository pattern**:
+QuestBook uses MVVM, unidirectional data flow and the Repository pattern.
 
-- Every screen has a ViewModel that exposes one `StateFlow<UiState>` (state goes down) and functions for user actions (events go up).
-- ViewModels depend on repository interfaces such as `AuthRepository`, `GroupRepository`, `QuestRepository` and `QuestTrackingStore`, not on Firebase or Room directly.
-- `data/AppServices` is a small manual dependency container. Tests replace the real implementations with fakes.
-- Navigation between all screens uses Navigation Compose (`ui/navigation/QuestBookNavHost.kt`).
+- Compose screens display observable state and send user actions to ViewModels.
+- ViewModels coordinate actions through repositories and stores.
+- Room supplies local quest data to the screens.
+- Firebase Authentication handles accounts.
+- Firestore stores groups and synchronizes shared group quest records.
+- Navigation Compose connects the screens.
+- Manual dependency containers allow tests to substitute fake repositories.
 
-```
+```text
 app/src/main/java/no/ntnu/prog2007/questbook/
-├── model/          Domain models: User, Group, Quest, QuestResult
+├── model/          User, Group, Quest and QuestResult
 ├── data/
-│   ├── auth/       AuthRepository + Firebase implementation
-│   ├── groups/     GroupRepository + Firestore implementation
-│   ├── repository/ QuestRepository + Room implementation
-│   ├── tracking/   Tracking sessions and results (Room)
-│   ├── challenges/ Group quests: definitions, attempts, membership
-│   ├── personal/   Personal daily and weekly quests
-│   ├── photo/      Photo compression and local storage
-│   └── sync/       Room <-> Firestore sync for group quests
-├── location/       GPS source, filtering, foreground service, Room database
-└── ui/             Compose screens and ViewModels, one package per feature
+│   ├── auth/       Authentication
+│   ├── groups/     Groups and invite codes
+│   ├── repository/ Observable quest storage
+│   ├── tracking/   Tracking checkpoints and results
+│   ├── challenges/ Group definitions and member attempts
+│   ├── personal/   Personal quests and activity accounting
+│   ├── photo/      Photo processing and persistence
+│   └── sync/       Group data synchronization
+├── location/       GPS, foreground service and Room database
+└── ui/             Compose screens, ViewModels and navigation
 ```
 
-### Where data is stored
+## Data storage
 
-| Data | Room (on the phone) | Firestore (shared) |
-|---|---|---|
-| User profile | | `users/{uid}`: username only, no email |
-| Groups and invite codes | | `groups/{id}`, `inviteCodes/{code}` |
-| Group quests, attempts, completions | yes (the screens read from Room) | `groups/{id}/challenges`, `attempts`, `completions` |
-| Activity for weekly group goals | yes | `groups/{id}/activity`: amounts and time only |
-| Photos for group quest completions | yes | `groups/{id}/photos`: Base64, max about 675 kB |
-| Personal quests, personal photos | yes | not shared |
-| GPS routes and tracking sessions | yes | **never leaves the phone** |
+| Data | Storage |
+|---|---|
+| Accounts | Firebase Authentication |
+| Public usernames | Firestore |
+| Groups and invite codes | Firestore |
+| Group challenges, attempts and completions | Room and Firestore |
+| Shared group activity and completion photos | Room and Firestore |
+| Personal quests and personal photos | Room |
+| GPS routes and tracking checkpoints | Room only |
 
-Room is the single source the screens read from. `FirestoreChallengeSync` listens to the user's groups and copies other members' rows into Room. It uploads the user's own rows with fixed document IDs, so a retry or a second phone never creates a duplicate. Firestore's offline queue sends the writes when the phone is back online.
+`FirestoreChallengeSync` exchanges shared group records with Room. Fixed document IDs prevent duplicate documents when retrying the same upload.
 
-### Security
+Existing local quests, tracking and results can be used without a connection. Initial sign-in and operations such as joining or leaving a group require connectivity. Queued uploads are not proof that the server has accepted a write.
 
-The project runs on the Firebase Spark plan, so there are no Cloud Functions. Instead, the important rules are enforced in [`firestore.rules`](firestore.rules):
+Room schema files are stored in `app/schemas`. Keep versions 1 through 7 because migration tests use them to verify upgrades preserve existing data.
 
-- Only members can read a group and everything in it. Nobody can list groups or invite codes.
-- Joining a group requires the invite code, and a user can only add themselves.
-- Shared quest documents can be created once and never changed. A member can only write their own attempts, completions, activity and photos.
-- The weekly goal must match the group's real member count, and a member's join time is stamped with the server's clock.
+## GPS behavior
 
-The rules must be published in the Firebase console (Firestore → Rules) after every change to `firestore.rules`.
+GPS only starts after an explicit Start or Resume action and precise location permission.
 
-### Sensor: GPS
+`GpsRepository` filters inaccurate fixes and measures accepted movement. `QuestTrackingService` keeps an active walk running during navigation and screen locking.
 
-GPS drives a decision, not just a map. `GpsRepository` filters inaccurate samples, adds up the accepted distance and stops tracking when the quest's distance target is reached. Each accepted point and the session progress are saved in a Room transaction, so a walk survives the app being closed. See [`docs/architecture.md`](docs/architecture.md).
+Pause excludes movement and active time until Resume. Route sections remain separate. Reaching the target stops location updates.
 
-## UML
+Finish waits for pending database writes before saving the result. After process death, an unfinished session restores paused and requires explicit Resume.
 
-The class diagram (overview of the presentation, data and domain layers) and the sequence diagram for a GPS quest from start to finish are in the final project report.
+Saved routes are offline path drawings, not street maps. Precise route coordinates are not uploaded by the group synchronization flow.
+
+## Firebase access
+
+Access rules are defined in [firestore.rules](firestore.rules).
+
+The rules restrict group data to members and validate ownership of submitted attempts, completions and photos. Users can query groups they belong to. Invite codes support direct lookup rather than listing.
+
+Changes to the rules must be published separately through Firebase. A successful Android build does not deploy or verify the cloud rules.
 
 ## Getting started
 
-**Requirements**
+### Requirements
 
-- Android Studio (recent stable version) with JDK 17 or newer for Gradle
-- Android SDK 37. The app runs on Android 8.0 (API 26) and newer
-- An emulator or phone with Google Play services (needed for location)
+- Android Studio with the JDK required by the project’s Gradle configuration
+- Android SDK 37
+- An emulator or phone running Android 8.0, API 26, or newer
+- Google Play services for the location provider
 
-**Run the app**
+### Firebase configuration
 
-1. Clone the repository and open the project folder in Android Studio.
-2. `app/google-services.json` for the Firebase project `questbook-1b814` is included, so no extra setup is needed for the team's project. To use your own Firebase project, replace the file, enable Email/Password sign-in and Firestore, and publish `firestore.rules`.
-3. Run the `app` configuration, or build from the terminal:
+The submitted ZIP excludes `app/google-services.json`, as required by the assignment.
 
-```
+Before building, obtain the configuration for the team’s Firebase project through the agreed course submission channel, or configure your own project:
+
+1. Register an Android application with package name `no.ntnu.prog2007.questbook`.
+2. Download its `google-services.json` into `app/`.
+3. Enable Email/Password authentication.
+4. Create a Firestore database and publish the project’s `firestore.rules`.
+
+A replacement Firebase project starts with no accounts or groups. Create these through the app.
+
+### Build and run
+
+Open the project in Android Studio, allow Gradle to sync and run the `app` configuration.
+
+To build from the terminal:
+
+```bash
 ./gradlew assembleDebug
 ```
 
 On Windows PowerShell, use `.\gradlew` instead of `./gradlew`.
 
-**Permissions:** the app asks for precise location (GPS quests) and notifications (the tracking notification). Photos are picked with the system photo picker, which needs no permission. Location is only used while a quest is being tracked.
+### Permissions
+
+- Precise location is requested when starting or resuming a GPS quest.
+- Notification permission is requested for tracking notifications on supported Android versions.
+- Gallery images use the system photo picker.
+
+Opening a quest or saved route does not start location tracking.
 
 ## Testing
 
+Run JVM unit tests:
+
+```bash
+./gradlew testDebugUnitTest
 ```
-./gradlew testDebugUnitTest            # unit tests (JVM)
-./gradlew connectedDebugAndroidTest    # instrumented and Compose UI tests (emulator or phone)
+
+Run instrumented tests with an emulator or phone connected:
+
+```bash
+./gradlew connectedDebugAndroidTest
 ```
 
-- **Unit tests** (`app/src/test`) are written in Arrange-Act-Assert style with positive and negative cases. They cover ViewModel behaviour, validation, GPS distance logic, quest rules and the Firestore mapping.
-- **Instrumented tests** (`app/src/androidTest`) cover Room stores, navigation and complete screen flows. They use fake login and group repositories, so they never talk to Firebase.
-- **User tests:** see the project report.
+Build the application and instrumented test APK:
 
-More test notes: [`docs/testing.md`](docs/testing.md) and [`docs/testing.md`](docs/testing.md).
+```bash
+./gradlew assembleDebug assembleDebugAndroidTest
+```
 
-## Further documentation
+Unit tests cover validation, ViewModels, GPS behavior, quest rules and cloud data mapping. Instrumented tests cover Room persistence, migrations and screen flows.
 
-- [Architecture](docs/architecture.md): data flow, GPS, quests, Memories and Firebase sharing.
-- [Testing](docs/testing.md): automated checks, manual acceptance and release checks.
+Local automated checks do not replace Firebase access-rule testing, physical GPS checks or testing across separate installations. User testing and findings are described in the project report.
+
+See [testing.md](docs/testing.md) for acceptance checks.
+
+## Documentation
+
+- [Architecture](docs/architecture.md)
+- [Testing](docs/testing.md)
+- KDoc comments in the source code
+- UML diagrams in the project report
 
 ## Known limitations
 
-- Members can leave a group online. Ownership passes to another member. The last member closes the group.
-- Using the same account on two phones at the same time is not supported for group quests.
-- Activity done before a member's first sync does not count towards that week's group goal.
-- Personal quests are stored on the phone only.
+- Personal quests and personal photos remain on the originating phone.
+- Simultaneous group quest use by the same account on multiple phones is not supported.
+- Group contribution history is limited by the available membership records.
+- Saved routes do not include a street-map background.
+- Exercise repetitions and visits are self-reported.
+- Discovery prompts and photos are optional and are not automatically verified.
+
+## Submission
+
+The submission consists of the Android project ZIP, report PDF and demonstration video. The report includes individual contributions, user testing, UML diagrams and the AI declaration.
+
+Exclude generated `build/` folders, `.gradle/`, `.idea/`, `google-services.json`, `.env` files and API keys from the ZIP. Verify that the extracted project opens in Android Studio and document any required configuration.
 
 ## Team
 
