@@ -6,6 +6,8 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.performTextInput
 import no.ntnu.prog2007.questbook.data.AppServices
 import no.ntnu.prog2007.questbook.data.auth.FakeAuthRepository
@@ -106,5 +108,23 @@ class GroupFlowTest {
 
         compose.onNodeWithText("You are already in this group.").assertIsDisplayed()
         compose.onNodeWithTag("join_group_code").assertIsDisplayed()
+    }
+
+    @Test
+    fun leaveGroup_cancelPreservesMembershipAndConfirmClosesLastMemberGroup() {
+        compose.onNodeWithTag("home_add_group").performClick()
+        compose.onNodeWithText("Create a new group").performClick()
+        compose.onNodeWithTag("create_group_name").performTextInput("Leave Test")
+        compose.onNodeWithTag("create_group_button").performClick()
+        compose.onNodeWithText("Leave group").performClick()
+        compose.onNodeWithText("Cancel").performClick()
+        compose.onNodeWithText("Leave Test").assertIsDisplayed()
+        org.junit.Assert.assertEquals(1, groups.allGroups.size)
+        compose.onNodeWithText("Leave group").performClick()
+        compose.onAllNodesWithText("Leave group").onLast().performClick()
+        compose.waitUntil(5_000) { groups.allGroups.isEmpty() }
+        compose.onNodeWithTag("tab_groups").performClick()
+        compose.onNodeWithText("You are not in a group yet.").assertIsDisplayed()
+        compose.onNodeWithText("Leave Test").assertDoesNotExist()
     }
 }
