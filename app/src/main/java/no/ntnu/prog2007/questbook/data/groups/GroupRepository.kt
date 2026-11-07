@@ -32,6 +32,10 @@ interface GroupRepository {
      */
     suspend fun joinGroup(userId: String, code: String): JoinOutcome
 
+    /** Leaves online after server validation. Transfers ownership, or closes an empty group. */
+    suspend fun leaveGroup(userId: String, groupId: String)
+
+
     /**
      * Looks up the usernames of [userIds].
      *

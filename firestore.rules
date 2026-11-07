@@ -90,7 +90,18 @@ service cloud.firestore {
         && request.resource.data.memberIds.toSet() == resource.data.memberIds.toSet().union([request.auth.uid].toSet())
         && request.resource.data.get('joinedWith', {}).get(request.auth.uid, '') == resource.data.inviteCode;
 
-      allow delete: if isUser(resource.data.ownerId);
+      // Leaving preserves all other members. Ownership must remain with a member.
+      allow update: if isMember()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds', 'ownerId'])
+        && request.resource.data.memberIds is list
+        && request.resource.data.memberIds.size() == resource.data.memberIds.size() - 1
+        && request.resource.data.memberIds.toSet() == resource.data.memberIds.toSet().difference([request.auth.uid].toSet())
+        && ((resource.data.ownerId != request.auth.uid && request.resource.data.ownerId == resource.data.ownerId)
+          || (resource.data.ownerId == request.auth.uid && request.resource.data.ownerId in request.resource.data.memberIds));
+
+      // The last member may close the group. History under it is retained but inaccessible.
+      allow delete: if isUser(resource.data.ownerId)
+        && resource.data.memberIds == [request.auth.uid];
 
       // ---------- Group quests (Firebase handoff, phase 1) ----------
       // Every document below can be created once and never changed or deleted, so a retry
@@ -238,7 +249,10 @@ service cloud.firestore {
         && request.resource.data.createdBy == request.auth.uid
         && getAfter(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.ownerId == request.auth.uid
         && getAfter(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.inviteCode == code;
-      allow delete: if isUser(resource.data.createdBy);
+      // A successor owner can also close the final member's group and remove its code.
+      allow delete: if signedIn()
+        && get(groupPath(resource.data.groupId)).data.ownerId == request.auth.uid
+        && get(groupPath(resource.data.groupId)).data.memberIds == [request.auth.uid];
     }
 
     // Quest photos. Only signed-in users. A new photo must belong to the user who uploads it.

@@ -103,4 +103,89 @@ class GroupsViewModelTest {
         // Assert
         assertEquals(listOf("crew"), viewModel.groups.value.map { it.id })
     }
+
+    @Test fun leave_memberIsRemovedAndCallbackRuns() {
+        val repository = FakeGroupRepository(listOf(crew), usernames)
+        val vm = GroupsViewModel(FakeAuthRepository(signedIn = true), repository)
+        var left = false
+        vm.leave("crew") { left = true }
+        assertTrue(left)
+        assertTrue(vm.groups.value.isEmpty())
+        assertEquals(listOf("emma"), repository.allGroups.single().memberIds)
+        assertEquals("emma", repository.allGroups.single().ownerId)
+    }
+
+    @Test fun leave_ownerTransfersToRemainingMember() = runBlocking {
+        val repository = FakeGroupRepository(listOf(crew))
+        repository.leaveGroup("emma", "crew")
+        assertEquals("test-user", repository.allGroups.single().ownerId)
+        assertEquals(listOf("test-user"), repository.allGroups.single().memberIds)
+    }
+
+    @Test fun leave_lastMemberClosesGroup() = runBlocking {
+        val repository = FakeGroupRepository(listOf(walkers))
+        repository.leaveGroup("sara", "walkers")
+        assertTrue(repository.allGroups.isEmpty())
+    }
+
+    @Test fun leave_nonmemberCannotChangeGroup() {
+        val repository = FakeGroupRepository(listOf(walkers))
+        val vm = GroupsViewModel(FakeAuthRepository(signedIn = true), repository)
+        var left = false
+        vm.leave("walkers") { left = true }
+        assertTrue(!left)
+        assertTrue(vm.leaveState.value.error != null)
+        assertEquals(walkers, repository.allGroups.single())
+    }
+
+    @Test fun leave_serverFailureKeepsGroupAndAllowsRetry() {
+        val fake = FakeGroupRepository(listOf(crew))
+        var fail = true
+        val repository = object : no.ntnu.prog2007.questbook.data.groups.GroupRepository by fake {
+            override suspend fun leaveGroup(userId: String, groupId: String) {
+                if (fail) error("Offline")
+                fake.leaveGroup(userId, groupId)
+            }
+        }
+        val vm = GroupsViewModel(FakeAuthRepository(signedIn = true), repository)
+        var left = false
+        vm.leave("crew") { left = true }
+        assertTrue(!left && !vm.leaveState.value.busy && vm.leaveState.value.error != null)
+        assertEquals(crew, fake.allGroups.single())
+        fail = false
+        vm.leave("crew") { left = true }
+        assertTrue(left)
+        assertEquals(null, vm.leaveState.value.error)
+    }
+
+    @Test fun leave_signedOutDoesNotChangeGroup() {
+        val fake = FakeGroupRepository(listOf(crew))
+        val vm = GroupsViewModel(FakeAuthRepository(signedIn = false), fake)
+        vm.leave("crew") { error("Must not navigate") }
+        assertEquals(crew, fake.allGroups.single())
+    }
+
+    @Test fun leave_duplicatePressDoesNotSubmitTwiceAndLogoutPreventsNavigation() {
+        val auth = FakeAuthRepository(signedIn = true)
+        val fake = FakeGroupRepository(listOf(crew))
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var calls = 0
+        val repository = object : no.ntnu.prog2007.questbook.data.groups.GroupRepository by fake {
+            override suspend fun leaveGroup(userId: String, groupId: String) {
+                calls++
+                gate.await()
+                fake.leaveGroup(userId, groupId)
+            }
+        }
+        val vm = GroupsViewModel(auth, repository)
+        var navigated = false
+        vm.leave("crew") { navigated = true }
+        vm.leave("crew") { navigated = true }
+        assertTrue(vm.leaveState.value.busy)
+        assertEquals(1, calls)
+        auth.signOut()
+        gate.complete(Unit)
+        assertTrue(!navigated)
+        assertTrue(!vm.leaveState.value.busy)
+    }
 }

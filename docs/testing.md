@@ -42,6 +42,12 @@ Local tests do not prove deployed Firebase rules, cross-device sharing, real GPS
 9. On two installations, create and draw group quests, complete independent attempts and check shared photos and weekly progress.
 10. Test offline saves and reconnect. Verify no duplicates, appropriate error feedback and no previous-account data after logout.
 
+## Leaving a group
+
+Check Cancel, confirmed leave and a failed connection. Verify owner transfer and last-member closure. Other members must remain unchanged and the closed group's invite code must stop working.
+
+Publish and test the updated Firebase rules before cloud use. Reject attempts to remove another member or close a group that still has members.
+
 ## Firebase and release checks
 
 Test deployed access rules with member, outsider and owner accounts. Reject forged ownership, unauthorized target edits, another member's writes and private route access. Test concurrent weekly creation and repeated uploads.
