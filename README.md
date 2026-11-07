@@ -80,7 +80,7 @@ The rules must be published in the Firebase console (Firestore → Rules) after 
 
 ### Sensor: GPS
 
-GPS drives a decision, not just a map. `GpsRepository` filters inaccurate samples, adds up the accepted distance and stops tracking when the quest's distance target is reached. Each accepted point and the session progress are saved in a Room transaction, so a walk survives the app being closed. See [`docs/gps-architecture.md`](docs/gps-architecture.md).
+GPS drives a decision, not just a map. `GpsRepository` filters inaccurate samples, adds up the accepted distance and stops tracking when the quest's distance target is reached. Each accepted point and the session progress are saved in a Room transaction, so a walk survives the app being closed. See [`docs/architecture.md`](docs/architecture.md).
 
 ## UML
 
@@ -91,7 +91,7 @@ The class diagram (overview of the presentation, data and domain layers) and the
 **Requirements**
 
 - Android Studio (recent stable version) with JDK 17 or newer for Gradle
-- Android SDK 37; the app runs on Android 8.0 (API 26) and newer
+- Android SDK 37. The app runs on Android 8.0 (API 26) and newer
 - An emulator or phone with Google Play services (needed for location)
 
 **Run the app**
@@ -119,18 +119,12 @@ On Windows PowerShell, use `.\gradlew` instead of `./gradlew`.
 - **Instrumented tests** (`app/src/androidTest`) cover Room stores, navigation and complete screen flows. They use fake login and group repositories, so they never talk to Firebase.
 - **User tests:** see the project report.
 
-More test notes: [`docs/gps-testing.md`](docs/gps-testing.md) and [`docs/memories-testing.md`](docs/memories-testing.md).
+More test notes: [`docs/testing.md`](docs/testing.md) and [`docs/testing.md`](docs/testing.md).
 
 ## Further documentation
 
-| Document | Topic |
-|---|---|
-| [`docs/gps-architecture.md`](docs/gps-architecture.md) | How quest assignment and GPS tracking fit together |
-| [`docs/gps-route-segments.md`](docs/gps-route-segments.md) | Pause and resume as separate route sections |
-| [`docs/saved-route-viewer.md`](docs/saved-route-viewer.md) | Viewing a saved route, and route privacy |
-| [`docs/group-quest-adventures.md`](docs/group-quest-adventures.md) | Open, drawn and weekly group quests |
-| [`docs/personal-quests.md`](docs/personal-quests.md) | Solo daily and weekly quests |
-| [`docs/app-readiness.md`](docs/app-readiness.md) | Readiness checklist and device acceptance tests |
+- [Architecture](docs/architecture.md): data flow, GPS, quests, Memories and Firebase sharing.
+- [Testing](docs/testing.md): automated checks, manual acceptance and release checks.
 
 ## Known limitations
 
